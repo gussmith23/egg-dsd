@@ -1,5 +1,4 @@
-use egg::{define_language, Applier, EGraph, ENode, Id, Metadata, Subst, Var};
-use std::option::Option;
+use egg::{define_language, EGraph};
 use std::vec::Vec;
 
 fn main() {
