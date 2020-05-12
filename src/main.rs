@@ -1,12 +1,23 @@
-use egg::{define_language, EGraph};
+use egg::{define_language, Applier, EGraph, ENode, Id, Metadata, Subst, Var};
 use std::option::Option;
 use std::vec::Vec;
 
 fn main() {
-    egg_dsd()
+    let expr = "
+     a"
+    .parse()
+    .unwrap();
+
+    use egg_dsd::attempt0::Language;
+    let (mut egraph, _id) = EGraph::<Language, ()>::from_expr(&expr);
+    egraph.dot().to_svg("initial-program.svg").unwrap();
+
+    egraph.add_expr(&"b".parse().unwrap());
+
+    egraph.dot().to_svg("initial-program.svg").unwrap();
 }
 
-fn egg_dsd() {
+fn _egg_dsd() {
     type DomainId = u32;
     enum Domain {
         // Short, or Toehold, domains
