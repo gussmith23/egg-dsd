@@ -104,6 +104,6 @@ mod tests {
             ],
         );
 
-        egraph.dot().to_svg("tmp.svg").unwrap();
+        //egraph.dot().to_svg("tmp.svg").unwrap();
     }
 }
