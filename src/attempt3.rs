@@ -99,10 +99,14 @@ fn add_strand_to_egraph(
     );
 
     let strand_id_enode_id: Id = egraph.add(ENode::leaf(Language::StrandId(strand_id)));
-    egraph.add(ENode::new(
+    let out = egraph.add(ENode::new(
         Language::Strand,
         vec![strand_id_enode_id, first_strand_cell_id],
-    ))
+    ));
+
+    egraph.rebuild();
+
+    out
 }
 
 #[cfg(test)]
