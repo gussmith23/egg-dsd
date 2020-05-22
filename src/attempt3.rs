@@ -178,3 +178,42 @@ mod tests {
         assert_eq!(top_matches[0].substs.len(), 1);
     }
 }
+
+pub mod rewrites {
+    use super::*;
+    use egg::{rewrite, Rewrite};
+
+    pub fn simplify_double_complement() -> Rewrite<Language, ()> {
+        rewrite!(
+        "simplify-double-complement";
+        "(complement (complement ?a))" =>
+            "?a")
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+        use egg::{EGraph, ENode, Runner};
+
+        #[test]
+        fn simplify_double_complement() {
+            let mut egraph = EGraph::default();
+
+            let enode_id = egraph.add(ENode::leaf(Language::DomainId(0)));
+            let enode_id = egraph.add(ENode::new(Language::Complement, vec![enode_id]));
+            let enode_id = egraph.add(ENode::new(Language::Complement, vec![enode_id]));
+
+            assert!(!egraph[enode_id]
+                .nodes
+                .iter()
+                .any(|enode| { enode.op == Language::DomainId(0) }));
+            let runner = Runner::new()
+                .with_egraph(egraph)
+                .run(&[super::simplify_double_complement()]);
+            assert!(runner.egraph[enode_id]
+                .nodes
+                .iter()
+                .any(|enode| { enode.op == Language::DomainId(0) }));
+        }
+    }
+}
