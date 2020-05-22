@@ -26,14 +26,14 @@ define_language! {
         TopStrandCell = "top-strand-cell",
 
         // domain: [(complement <domain>)
-        //          | (long-domain)
-        //          | (toehold-domain)]
+        //          | (long-domain <domain-id>)
+        //          | (toehold-domain <domain-id>)]
         Complement = "complement",
-        LongDomain(DomainId),
-        ToeholdDomain(DomainId),
+        LongDomain = "long-domain",
+        ToeholdDomain = "toehold-domain",
 
         Nil = "nil",
-        //DomainId(DomainId),
+        DomainId(DomainId),
         StrandId(StrandId),
     }
 }
@@ -58,8 +58,22 @@ fn add_strand_to_egraph(
                         let domain_egraph_id: Id = add_domain_to_egraph(egraph, domain);
                         egraph.add(ENode::new(Language::Complement, vec![domain_egraph_id]))
                     }
-                    &Domain::Toehold(id) => egraph.add(ENode::leaf(Language::ToeholdDomain(*id))),
-                    &Domain::Long(id) => egraph.add(ENode::leaf(Language::LongDomain(*id))),
+                    &Domain::Toehold(id) => {
+                        let domain_id_enode_id: Id =
+                            egraph.add(ENode::leaf(Language::DomainId(*id)));
+                        egraph.add(ENode::new(
+                            Language::ToeholdDomain,
+                            vec![domain_id_enode_id],
+                        ))
+                    }
+                    &Domain::Long(id) => {
+                        let domain_id_enode_id: Id =
+                            egraph.add(ENode::leaf(Language::DomainId(*id)));
+                        egraph.add(ENode::new(
+                            Language::LongDomain,
+                            vec![domain_id_enode_id],
+                        ))
+                    }
                 }
             }
 
