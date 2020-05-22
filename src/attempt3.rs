@@ -1,23 +1,23 @@
 use egg::{define_language, EGraph, ENode, Id};
 
-enum DomainId {
+pub enum DomainId {
     Complement(Box<DomainId>),
     DomainId(u32),
 }
 type StrandId = u32;
 
-enum Domain {
+pub enum Domain {
     Toehold(DomainId),
     Long(DomainId),
 }
 
-enum TopOrBottom {
+pub enum TopOrBottom {
     Top,
     Bottom,
 }
 
 define_language! {
-    enum Language {
+    pub enum Language {
         // Syntax:
         // a unique strand: (strand <strand-id> <strand-cell>)
         Strand = "strand",
@@ -43,7 +43,7 @@ define_language! {
     }
 }
 
-fn add_strand_to_egraph(
+pub fn add_strand_to_egraph(
     egraph: &mut EGraph<Language, ()>,
     top_or_bottom: TopOrBottom,
     strand_id: StrandId,
