@@ -19,6 +19,19 @@ pub enum TopOrBottom {
 define_language! {
     pub enum Language {
         // Syntax:
+
+        // double-strand-cell: [(bottom-double-strand-cell
+        //                       <bottom-strand-cell>
+        //                       <top-strand-cell>
+        //                       [<bottom-double-strand-cell>|nil] )
+        //                      | (top-double-strand-cell
+        //                         <top-strand-cell>
+        //                         <bottom-strand-cell>
+        //                         [<top-double-strand-cell>|nil] )]
+        BottomDoubleStrandCell = "bottom-double-strand-cell",
+        TopDoubleStrandCell = "top-double-strand-cell",
+
+
         // a unique strand: (strand <strand-id> <strand-cell>)
         Strand = "strand",
 
