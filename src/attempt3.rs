@@ -1,4 +1,5 @@
 use egg::{define_language, Applier, EGraph, ENode, Id, Metadata, Var};
+use log::{debug, info, trace};
 use std::collections::HashMap;
 
 type DomainIdValue = u32;
@@ -624,6 +625,47 @@ pub mod rewrites {
             }})
     }
 
+    pub fn run(egraph: &mut EGraph<Language, Meta>, rules: &[Rewrite<Language, Meta>]) {
+        let mut egraph_size = egraph.total_size();
+        loop {
+            run_one(egraph, rules);
+            if egraph_size == egraph.total_size() {
+                break;
+            }
+
+            egraph_size = egraph.total_size();
+        }
+    }
+
+    fn run_one(egraph: &mut EGraph<Language, Meta>, rules: &[Rewrite<Language, Meta>]) {
+        trace!("EGraph {:?}", egraph.dump());
+
+        let mut matches = Vec::new();
+        for rule in rules {
+            let ms = rule.search(&egraph);
+            matches.push(ms);
+        }
+
+        for (rw, ms) in rules.iter().zip(matches) {
+            let total_matches: usize = ms.iter().map(|m| m.substs.len()).sum();
+            if total_matches == 0 {
+                continue;
+            }
+
+            debug!("Applying {} {} times", rw.name(), total_matches);
+
+            rw.apply(egraph, &ms);
+        }
+
+        egraph.rebuild();
+
+        info!(
+            "size: n={}, e={}",
+            egraph.total_size(),
+            egraph.number_of_classes()
+        );
+    }
+
     #[cfg(test)]
     mod tests {
         use super::*;
@@ -652,6 +694,8 @@ pub mod rewrites {
 
         #[test]
         fn toehold_bind_and_bind() {
+            test_logger::ensure_env_logger_initialized();
+
             let mut egraph = EGraph::<Language, Meta>::default();
             add_strand_to_egraph(
                 &mut egraph,
@@ -677,27 +721,23 @@ pub mod rewrites {
                 ],
             );
 
-            // TODO(gus) I might need a custom outer loop. This is working, but
-            // only if I force the rewrites to run. It's probably a problem of
-            // rebuilding.
-            let runner = Runner::new()
-                .with_egraph(egraph)
-                .run(&[super::toehold_bind(TopOrBottom::Bottom)]);
-            let runner = Runner::new()
-                .with_egraph(runner.egraph)
-                .run(&[super::bind(TopOrBottom::Bottom)]);
-            let runner = Runner::new()
-                .with_egraph(runner.egraph)
-                .run(&[super::bind(TopOrBottom::Bottom)]);
+            run(
+                &mut egraph,
+                &[
+                    super::toehold_bind(TopOrBottom::Bottom),
+                    super::bind(TopOrBottom::Bottom),
+                ],
+            );
 
-            runner.egraph.dot().to_svg("out.svg").unwrap();
-            assert!(
-                "(bottom-double-strand-cell ?a ?b ?rest)"
+            assert_eq!(
+                "(bottom-double-strand-cell ?a ?b
+                  (bottom-double-strand-cell ?c ?d
+                   (bottom-double-strand-cell ?e ?f nil)))"
                     .parse::<Pattern<Language>>()
                     .unwrap()
-                    .search(&runner.egraph)
-                    .len()
-                    > 0
+                    .search(&egraph)
+                    .len(),
+                1
             );
         }
     }
