@@ -442,7 +442,9 @@ pub mod rewrites {
 
                         let complement_matches: Vec<Id> =
                             self.get_complement_matches(*domain_id_value, egraph);
-                        if complement_matches.len() == 0 { return None }
+                        if complement_matches.len() == 0 {
+                            return None;
+                        }
 
                         Some(SearchMatches {
                             eclass: search_matches.eclass,
@@ -509,6 +511,119 @@ pub mod rewrites {
         )
     }
 
+    /// Rewrite which binds complementary domains, if their adjacent domains are
+    /// already bound.
+    pub fn bind(top_or_bottom: TopOrBottom) -> Rewrite<Language, Meta> {
+        let search_pattern: Pattern<Language> = match top_or_bottom {
+            TopOrBottom::Bottom => {
+                "(bottom-double-strand-cell
+                                     (bottom-strand-cell
+                                      ?unused0
+                                      (bottom-strand-cell
+                                       (long-domain (domain-id ?a))
+                                       ?strand0rest))
+                                     (top-strand-cell
+                                      ?unused2
+                                      (top-strand-cell
+                                       (long-domain (complement (domain-id ?a)))
+                                       ?strand1rest))
+                                     ?unused4)"
+            }
+            TopOrBottom::Top => {
+                "(top-double-strand-cell
+                                  (top-strand-cell
+                                   ?unused0
+                                   (top-strand-cell
+                                    (long-domain (domain-id ?a))
+                                    ?strand0rest))
+                                  (bottom-strand-cell
+                                   ?unused2
+                                   (bottom-strand-cell
+                                    (long-domain (complement (domain-id ?a)))
+                                    ?strand1rest))
+                                  ?unused4)"
+            }
+        }
+        .parse()
+        .unwrap();
+
+        struct BindApplier {
+            top_or_bottom: TopOrBottom,
+            domain: Var,
+            strand_0_rest: Var,
+            strand_1_rest: Var,
+        }
+        impl Applier<Language, Meta> for BindApplier {
+            fn apply_one(
+                &self,
+                egraph: &mut EGraph<Language, Meta>,
+                matched_id: Id,
+                subst: &Subst,
+            ) -> Vec<Id> {
+                let domain_id_value: DomainIdValue = match egraph[subst[&self.domain]]
+                    .metadata
+                    .domain_id
+                    .as_ref()
+                    .unwrap()
+                {
+                    DomainId::DomainId(v) => *v,
+                    _ => panic!(),
+                };
+
+                let domain_id_value_eclass_id: Id =
+                    egraph.add(ENode::leaf(Language::DomainIdValue(domain_id_value)));
+                let domain_id_eclass_id: Id = egraph.add(ENode::new(
+                    Language::DomainId,
+                    vec![domain_id_value_eclass_id],
+                ));
+                let long_domain_eclass_id: Id =
+                    egraph.add(ENode::new(Language::LongDomain, vec![domain_id_eclass_id]));
+                let complement_eclass_id: Id =
+                    egraph.add(ENode::new(Language::Complement, vec![domain_id_eclass_id]));
+                let complement_long_domain_eclass_id: Id =
+                    egraph.add(ENode::new(Language::LongDomain, vec![complement_eclass_id]));
+                let single_strand_0_eclass_id = egraph.add(ENode::new(
+                    match self.top_or_bottom {
+                        TopOrBottom::Top => Language::TopStrandCell,
+                        TopOrBottom::Bottom => Language::BottomStrandCell,
+                    },
+                    vec![long_domain_eclass_id, subst[&self.strand_0_rest]],
+                ));
+                let single_strand_1_eclass_id = egraph.add(ENode::new(
+                    match self.top_or_bottom {
+                        TopOrBottom::Top => Language::BottomStrandCell,
+                        TopOrBottom::Bottom => Language::TopStrandCell,
+                    },
+                    vec![complement_long_domain_eclass_id, subst[&self.strand_1_rest]],
+                ));
+
+                egraph.add(ENode::new(
+                    match self.top_or_bottom {
+                        TopOrBottom::Top => Language::TopDoubleStrandCell,
+                        TopOrBottom::Bottom => Language::BottomDoubleStrandCell,
+                    },
+                    vec![
+                        single_strand_0_eclass_id,
+                        single_strand_1_eclass_id,
+                        matched_id,
+                    ],
+                ));
+
+                vec![]
+            }
+        }
+
+        rewrite!("bind";
+        search_pattern =>
+        {
+            BindApplier {
+                domain: "?a".parse().unwrap(),
+                top_or_bottom: top_or_bottom,
+                strand_0_rest: "?strand0rest".parse().unwrap(),
+                strand_1_rest: "?strand1rest".parse().unwrap(),
+            }})
+    }
+
     #[cfg(test)]
     mod tests {
         use super::*;
@@ -536,7 +651,7 @@ pub mod rewrites {
         }
 
         #[test]
-        fn toehold_bind() {
+        fn toehold_bind_and_bind() {
             let mut egraph = EGraph::<Language, Meta>::default();
             add_strand_to_egraph(
                 &mut egraph,
@@ -561,12 +676,29 @@ pub mod rewrites {
                     Domain::Long(DomainId::DomainId(4)),
                 ],
             );
+
+            // TODO(gus) I might need a custom outer loop. This is working, but
+            // only if I force the rewrites to run. It's probably a problem of
+            // rebuilding.
             let runner = Runner::new()
                 .with_egraph(egraph)
                 .run(&[super::toehold_bind(TopOrBottom::Bottom)]);
+            let runner = Runner::new()
+                .with_egraph(runner.egraph)
+                .run(&[super::bind(TopOrBottom::Bottom)]);
+            let runner = Runner::new()
+                .with_egraph(runner.egraph)
+                .run(&[super::bind(TopOrBottom::Bottom)]);
 
             runner.egraph.dot().to_svg("out.svg").unwrap();
-            assert!("(bottom-double-strand-cell ?a ?b ?rest)".parse::<Pattern<Language>>().unwrap().search(&runner.egraph).len() > 0);
+            assert!(
+                "(bottom-double-strand-cell ?a ?b ?rest)"
+                    .parse::<Pattern<Language>>()
+                    .unwrap()
+                    .search(&runner.egraph)
+                    .len()
+                    > 0
+            );
         }
     }
 }
