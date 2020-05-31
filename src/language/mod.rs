@@ -316,47 +316,4 @@ mod tests {
             1
         );
     }
-
-    #[test]
-    fn search() {
-        let mut egraph = EGraph::<Language, Meta>::default();
-        add_directional_strand_to_egraph(
-            &mut egraph,
-            TopOrBottom::Bottom,
-            &vec![
-                Domain::Toehold(DomainId::DomainId(0)),
-                Domain::Long(DomainId::DomainId(1)),
-                Domain::Long(DomainId::DomainId(2)),
-                Domain::Long(DomainId::Complement(Box::new(DomainId::DomainId(2)))),
-                Domain::Long(DomainId::DomainId(3)),
-            ],
-        );
-
-        add_directional_strand_to_egraph(
-            &mut egraph,
-            TopOrBottom::Top,
-            &vec![
-                Domain::Toehold(DomainId::DomainId(0)),
-                Domain::Long(DomainId::DomainId(1)),
-                Domain::Long(DomainId::DomainId(2)),
-                Domain::Long(DomainId::DomainId(4)),
-            ],
-        );
-
-        //egraph.dot().to_svg("tmp2.svg").unwrap();
-
-        let bottom_pattern: Pattern<Language> = "(bottom-strand-cell (toehold-domain ?a) ?rest)"
-            .parse()
-            .unwrap();
-        let top_pattern: Pattern<Language> = "(top-strand-cell (toehold-domain ?a) ?rest)"
-            .parse()
-            .unwrap();
-
-        let bottom_matches = bottom_pattern.search(&egraph);
-        assert_eq!(bottom_matches.len(), 1);
-        assert_eq!(bottom_matches[0].substs.len(), 1);
-        let top_matches = top_pattern.search(&egraph);
-        assert_eq!(top_matches.len(), 1);
-        assert_eq!(top_matches[0].substs.len(), 1);
-    }
 }
