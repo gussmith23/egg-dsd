@@ -8,6 +8,32 @@ pub fn simplify_double_complement() -> Rewrite<Language, Meta> {
             "?a")
 }
 
+/// Flip top strands to bottom (or vice versa).
+///
+/// Thoughts on this: I can see doing this two ways. First way would actually
+/// involve equalities. A top strand cell would be equivalent to the
+/// corresponding bottom strand cell that it came from. This is perhaps the
+/// first obvious way to implement this...but I don't think it's right. A strand
+/// cell represents a domain and everything after it. However, if you flip that
+/// cell, it goes the other direction, and represents itself and everything
+/// /before/ it. While the domain in the cell is equivalent, they no longer
+/// represent the same thing, because of the chain of domains following will not
+/// be the same. This is a shame, because grouping top cells with their
+/// corresponding bottom cells in equality classes would have been nice.
+///
+/// The other way is to still not use any equalities. This may bite us down the
+/// road, if we are never able to put anything into the same eclasses and we
+/// just keep having duplicates of everything everywhere. I think in this case
+/// it's probably easier to just insert both strand directions when we insert
+/// the strand into the egraph.
+///
+/// TODO(gus) instead of a linked-list structure, could we use a tree structure
+/// for strands? That's probably something that I won't actually have time to
+/// investigate.
+pub fn flip_strand(_top_or_bottom: TopOrBottom) -> Rewrite<Language, Meta> {
+    panic!();
+}
+
 /// Binds toeholds, and then binds everything after the toehold that can be
 /// bound.
 pub fn toehold_bind(top_or_bottom: TopOrBottom) -> Rewrite<Language, Meta> {
