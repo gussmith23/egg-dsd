@@ -41,7 +41,7 @@ define_language! {
 
 
         // a unique strand: (strand <strand-id> <strand-cell>)
-        Strand = "strand",
+        //Strand = "strand",
 
         // strand-cell: [(bottom-strand-cell <domain> [<strand-cell> | nil])
         //               | (top-strand-cell <domain> [<strand-cell> | nil])]
@@ -113,7 +113,7 @@ impl Metadata<Language> for Meta {
                     ),
                 }
             }
-            Language::Strand => Meta { domain_id: None },
+            //Language::Strand => Meta { domain_id: None },
             Language::LongDomain => {
                 assert_eq!(enode.children.len(), 1);
                 Meta {
