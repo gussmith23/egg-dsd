@@ -398,10 +398,9 @@ mod tests {
         test_logger::ensure_env_logger_initialized();
 
         let mut egraph = EGraph::<Language, Meta>::default();
-        add_strand_to_egraph(
+        add_directional_strand_to_egraph(
             &mut egraph,
             TopOrBottom::Bottom,
-            0,
             &vec![
                 Domain::Toehold(DomainId::DomainId(0)),
                 Domain::Long(DomainId::DomainId(1)),
@@ -410,10 +409,9 @@ mod tests {
             ],
         );
 
-        add_strand_to_egraph(
+        add_directional_strand_to_egraph(
             &mut egraph,
             TopOrBottom::Top,
-            1,
             &vec![
                 Domain::Toehold(DomainId::Complement(Box::new(DomainId::DomainId(0)))),
                 Domain::Long(DomainId::Complement(Box::new(DomainId::DomainId(1)))),

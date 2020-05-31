@@ -181,10 +181,9 @@ impl Metadata<Language> for Meta {
     }
 }
 
-pub fn add_strand_to_egraph(
+pub fn add_directional_strand_to_egraph(
     egraph: &mut EGraph<Language, Meta>,
     top_or_bottom: TopOrBottom,
-    strand_id: StrandId,
     strand_values: &Vec<Domain>,
 ) -> Id {
     let nil_id = egraph.add(ENode::leaf(Language::Nil));
@@ -243,15 +242,15 @@ pub fn add_strand_to_egraph(
         },
     );
 
-    let strand_id_enode_id: Id = egraph.add(ENode::leaf(Language::StrandId(strand_id)));
-    let out = egraph.add(ENode::new(
-        Language::Strand,
-        vec![strand_id_enode_id, first_strand_cell_id],
-    ));
+    // let strand_id_enode_id: Id = egraph.add(ENode::leaf(Language::StrandId(strand_id)));
+    // let out = egraph.add(ENode::new(
+    //     Language::Strand,
+    //     vec![strand_id_enode_id, first_strand_cell_id],
+    // ));
 
     egraph.rebuild();
 
-    out
+    first_strand_cell_id
 }
 
 #[cfg(test)]
@@ -262,10 +261,9 @@ mod tests {
     #[test]
     fn add_to_egraph() {
         let mut egraph = EGraph::<Language, Meta>::default();
-        add_strand_to_egraph(
+        add_directional_strand_to_egraph(
             &mut egraph,
             TopOrBottom::Bottom,
-            0,
             &vec![
                 Domain::Toehold(DomainId::DomainId(0)),
                 Domain::Long(DomainId::DomainId(1)),
@@ -281,10 +279,9 @@ mod tests {
     #[test]
     fn search() {
         let mut egraph = EGraph::<Language, Meta>::default();
-        add_strand_to_egraph(
+        add_directional_strand_to_egraph(
             &mut egraph,
             TopOrBottom::Bottom,
-            0,
             &vec![
                 Domain::Toehold(DomainId::DomainId(0)),
                 Domain::Long(DomainId::DomainId(1)),
@@ -294,10 +291,9 @@ mod tests {
             ],
         );
 
-        add_strand_to_egraph(
+        add_directional_strand_to_egraph(
             &mut egraph,
             TopOrBottom::Top,
-            0,
             &vec![
                 Domain::Toehold(DomainId::DomainId(0)),
                 Domain::Long(DomainId::DomainId(1)),
