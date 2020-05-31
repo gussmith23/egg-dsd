@@ -10,6 +10,9 @@ pub fn simplify_double_complement() -> Rewrite<Language, Meta> {
 
 /// Flip top strands to bottom (or vice versa).
 ///
+/// NOTE: not needed now, as add_strand_to_egraph adds both strand directions
+/// when adding a strand.
+///
 /// Thoughts on this: I can see doing this two ways. First way would actually
 /// involve equalities. A top strand cell would be equivalent to the
 /// corresponding bottom strand cell that it came from. This is perhaps the
