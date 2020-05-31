@@ -12,6 +12,7 @@ pub enum DomainId {
 }
 type StrandId = u32;
 
+#[derive(Clone)]
 pub enum Domain {
     Toehold(DomainId),
     Long(DomainId),
@@ -181,6 +182,22 @@ impl Metadata<Language> for Meta {
     }
 }
 
+/// Strand values should be in bottom strand direction.
+/// Returns the id of the bottom strand and the id of the top strand.
+pub fn add_strand_to_egraph(
+    egraph: &mut EGraph<Language, Meta>,
+    strand_values: &Vec<Domain>,
+) -> (Id, Id) {
+    let bottom_strand_id =
+        add_directional_strand_to_egraph(egraph, TopOrBottom::Bottom, strand_values);
+    let top_strand_id = add_directional_strand_to_egraph(
+        egraph,
+        TopOrBottom::Top,
+        &strand_values.iter().rev().cloned().collect(),
+    );
+    (bottom_strand_id, top_strand_id)
+}
+
 pub fn add_directional_strand_to_egraph(
     egraph: &mut EGraph<Language, Meta>,
     top_or_bottom: TopOrBottom,
@@ -261,9 +278,8 @@ mod tests {
     #[test]
     fn add_to_egraph() {
         let mut egraph = EGraph::<Language, Meta>::default();
-        add_directional_strand_to_egraph(
+        add_strand_to_egraph(
             &mut egraph,
-            TopOrBottom::Bottom,
             &vec![
                 Domain::Toehold(DomainId::DomainId(0)),
                 Domain::Long(DomainId::DomainId(1)),
@@ -273,7 +289,32 @@ mod tests {
             ],
         );
 
-        //egraph.dot().to_svg("tmp.svg").unwrap();
+        //egraph.dot().to_svg("add-to-egraph.svg").unwrap();
+
+        assert_eq!(
+            "(bottom-strand-cell (toehold-domain (domain-id 0))
+              (bottom-strand-cell (long-domain (domain-id 1))
+               (bottom-strand-cell (long-domain (domain-id 2))
+                (bottom-strand-cell (long-domain (complement (domain-id 2)))
+                 (bottom-strand-cell (long-domain (domain-id 3)) nil)))))"
+                .parse::<Pattern<_>>()
+                .unwrap()
+                .search(&egraph)
+                .len(),
+            1
+        );
+        assert_eq!(
+            "(top-strand-cell (long-domain (domain-id 3))
+              (top-strand-cell (long-domain (complement (domain-id 2)))
+               (top-strand-cell (long-domain (domain-id 2))
+                (top-strand-cell (long-domain (domain-id 1))
+                 (top-strand-cell (toehold-domain (domain-id 0)) nil)))))"
+                .parse::<Pattern<_>>()
+                .unwrap()
+                .search(&egraph)
+                .len(),
+            1
+        );
     }
 
     #[test]
