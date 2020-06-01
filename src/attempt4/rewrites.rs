@@ -1,37 +1,55 @@
 use super::*;
 use egg::{rewrite, Rewrite};
 
-pub fn remove_empty_strand_cell_left() -> Rewrite<Language, Meta> {
-    rewrite!(
+pub fn simplify_strand_cell() -> Vec<Rewrite<Language, Meta>> {
+    vec![
+        rewrite!(
         "remove-empty-strand-cell-left";
         "(strand-cell (strand-cell) ?rest)" =>
-            "(strand-cell ?rest)")
-}
-
-pub fn remove_empty_strand_cell_right() -> Rewrite<Language, Meta> {
-    rewrite!(
+            "(strand-cell ?rest)"),
+        rewrite!(
         "remove-empty-strand-cell-right";
         "(strand-cell ?rest (strand-cell))" =>
-            "(strand-cell ?rest)")
-}
-
-pub fn simplify_double_strand_cell_zero_arguments() -> Rewrite<Language, Meta> {
-    rewrite!(
+            "(strand-cell ?rest)"),
+        rewrite!(
         "simplify-double-strand-cell-zero-arguments";
         "(strand-cell (strand-cell))" =>
-            "(strand-cell)")
-}
-
-pub fn simplify_double_strand_cell_one_argument() -> Rewrite<Language, Meta> {
-    rewrite!(
+            "(strand-cell)"),
+        rewrite!(
         "simplify-double-strand-cell-one-argument";
         "(strand-cell (strand-cell ?arg))" =>
-            "(strand-cell ?arg)")
+            "(strand-cell ?arg)"),
+        rewrite!(
+        "simplify-double-strand-cell-two-arguments";
+        "(strand-cell (strand-cell ?arg0 ?arg1))" =>
+            "(strand-cell ?arg0 ?arg1)"),
+        rewrite!(
+            "TODO";
+            "(strand-cell (strand-cell ?arg0) ?arg1)" =>
+                "(strand-cell ?arg0 ?arg1)"),
+        rewrite!(
+            "TODO";
+            "(strand-cell ?arg0 (strand-cell ?arg1))" =>
+                "(strand-cell ?arg0 ?arg1)"),
+    ]
 }
 
-pub fn simplify_double_strand_cell_two_arguments() -> Rewrite<Language, Meta> {
+pub fn strand_cell_commutativity() -> Vec<Rewrite<Language, Meta>> {
+    vec![
+        rewrite!(
+            "TODO";
+            "(strand-cell (strand-cell ?arg0 ?arg1) ?arg2)" =>
+                "(strand-cell ?arg0 (strand-cell ?arg1 ?arg2))"),
+        rewrite!(
+            "TODO";
+            "(strand-cell ?arg0 (strand-cell ?arg1 ?arg2))" =>
+                "(strand-cell (strand-cell ?arg0 ?arg1) ?arg2)"),
+    ]
+}
+
+pub fn rewrite() -> Rewrite<Language, Meta> {
     rewrite!(
-        "simplify-double-strand-cell-two-arguments";
+        "rewrite";
         "(strand-cell (strand-cell ?arg0 ?arg1))" =>
             "(strand-cell ?arg0 ?arg1)")
 }
@@ -379,7 +397,7 @@ pub fn simplify_double_complement() -> Rewrite<Language, Meta> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use egg::{EGraph, ENode, Runner};
+    use egg::{EGraph, ENode, Pattern, Runner, Searcher};
 
     #[test]
     fn simplify_double_complement() {
@@ -400,6 +418,78 @@ mod tests {
             .nodes
             .iter()
             .any(|enode| { enode.op == Language::DomainIdValue(0) }));
+    }
+
+    #[test]
+    fn strand_rewrites() {
+        let mut egraph = EGraph::<Language, Meta>::default();
+        add_strand_to_egraph(
+            &mut egraph,
+            &vec![
+                Domain::Toehold(DomainId::DomainId(0)),
+                Domain::Long(DomainId::DomainId(1)),
+                Domain::Long(DomainId::DomainId(2)),
+                Domain::Long(DomainId::Complement(Box::new(DomainId::DomainId(2)))),
+                Domain::Long(DomainId::DomainId(3)),
+            ],
+        );
+
+        let mut rws = simplify_strand_cell();
+        rws.extend(strand_cell_commutativity());
+        let runner = Runner::new().with_egraph(egraph).run(&rws);
+
+        //runner.egraph.dot().to_svg("simplify-and-commutativity.svg").unwrap();
+
+        assert_eq!(
+            "(strand-cell
+              (strand-cell
+               (strand-cell
+                (strand-cell
+                 (strand-cell
+                  (strand-cell)
+                  (toehold-domain (domain-id 0))
+                 )
+                 (long-domain (domain-id 1))
+                )
+                (long-domain (domain-id 2))
+               )
+               (long-domain (complement (domain-id 2)))
+              )
+              (long-domain (domain-id 3))
+             )
+             "
+            .parse::<Pattern<_>>()
+            .unwrap()
+            .search(&runner.egraph)
+            .len(),
+            1
+        );
+
+        assert_eq!(
+            "(strand-cell (toehold-domain (domain-id 0))
+              (strand-cell (long-domain (domain-id 1))
+               (strand-cell (long-domain (domain-id 2))
+                (strand-cell (long-domain (complement (domain-id 2)))
+                 (long-domain (domain-id 3))))))
+             "
+            .parse::<Pattern<_>>()
+            .unwrap()
+            .search(&runner.egraph)
+            .len(),
+            1
+        );
+
+        assert_eq!(
+            "(strand-cell
+              (toehold-domain (domain-id 0))
+              (long-domain (domain-id 1)))
+             "
+                .parse::<Pattern<_>>()
+                .unwrap()
+                .search(&runner.egraph)
+                .len(),
+            1
+        );
     }
 
     // #[test]
