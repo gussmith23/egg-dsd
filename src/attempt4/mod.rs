@@ -247,7 +247,7 @@ mod tests {
             ],
         );
 
-        egraph.dot().to_svg("add-to-egraph.svg").unwrap();
+        //egraph.dot().to_svg("add-to-egraph.svg").unwrap();
 
         assert_eq!(
             "(strand-cell
