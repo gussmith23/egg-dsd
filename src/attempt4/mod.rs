@@ -1,6 +1,6 @@
 use egg::{define_language, EGraph, ENode, Id, Metadata};
 
-//pub mod rewrites;
+pub mod rewrites;
 
 type DomainIdValue = u32;
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
