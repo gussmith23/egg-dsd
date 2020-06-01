@@ -37,17 +37,15 @@ define_language! {
         // BottomDoubleStrandCell = "bottom-double-strand-cell",
         // TopDoubleStrandCell = "top-double-strand-cell",
 
-        // TODO(gus) too many variants here?
-        // strand-cell: [  (strand-cell)
-        //               | (strand-cell <domain>)
-        //               | (strand-cell <domain> <domain>)
-        //               | (strand-cell <strand-cell> <domain>)
-        //               | (strand-cell <domain> <strand-cell>)
-        //               | (strand-cell <strand-cell> <strand-cell>) ]
+        // Note that a strand cell has zero or one domains; no more.
+        // strand-cell: [| (strand-cell [ <strand-cell> | nil ] <domain>)
+        //               | (strand-cell <domain> [ <strand-cell> | nil ])
+        //               | (strand-cell [ <strand-cell> | nil ] [ <strand-cell> | nil ]) ]
         StrandCell = "strand-cell",
 
-        // domain: [ (long-domain <domain-id>)
-        //          | (toehold-domain <domain-id>)]
+        // domain: [ (domain (long-domain <domain-id>))
+        //          | (domain (toehold-domain <domain-id>)) ]
+        Domain = "domain",
         LongDomain = "long-domain",
         ToeholdDomain = "toehold-domain",
 
@@ -56,16 +54,23 @@ define_language! {
         Complement = "complement",
         DomainId = "domain-id",
 
+        Nil = "nil",
 
         // TODO(gus) give an alias for u32 here?
         DomainIdValue(u32),
     }
 }
 
+/// domain-id nodes and strand-cell nodes should never be unified!
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Value {
+    /// The value taken on by a domain-id node.
+    DomainIdValue(DomainId),
+}
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Meta {
     /// If this eclass contains a domain id, this will hold its value.
-    domain_id: Option<DomainId>,
+    value: Option<Value>,
 }
 impl Metadata<Language> for Meta {
     type Error = ();
@@ -77,72 +82,98 @@ impl Metadata<Language> for Meta {
 
     fn make(egraph: &EGraph<Language, Self>, enode: &ENode<Language>) -> Self {
         match &enode.op {
+            Language::Nil => Meta { value: None },
             Language::DomainIdValue(id) => Meta {
-                domain_id: Some(DomainId::DomainId(*id)),
+                value: Some(Value::DomainIdValue(DomainId::DomainId(*id))),
             },
+            Language::Domain => {
+                assert_eq!(enode.children.len(), 1);
+                Meta {
+                    value: Some(
+                        match egraph[enode.children[0]].metadata.value.as_ref().unwrap() {
+                            Value::DomainIdValue(v) => Value::DomainIdValue(v.clone()),
+                        },
+                    ),
+                }
+            }
             Language::LongDomain => {
                 assert_eq!(enode.children.len(), 1);
                 Meta {
-                    domain_id: Some(
-                        egraph[enode.children[0]]
-                            .metadata
-                            .domain_id
-                            .as_ref()
-                            .unwrap()
-                            .clone(),
+                    value: Some(
+                        match egraph[enode.children[0]].metadata.value.as_ref().unwrap() {
+                            Value::DomainIdValue(v) => Value::DomainIdValue(v.clone()),
+                        },
                     ),
                 }
             }
             Language::ToeholdDomain => {
                 assert_eq!(enode.children.len(), 1);
                 Meta {
-                    domain_id: Some(
-                        egraph[enode.children[0]]
-                            .metadata
-                            .domain_id
-                            .as_ref()
-                            .unwrap()
-                            .clone(),
+                    value: Some(
+                        match egraph[enode.children[0]].metadata.value.as_ref().unwrap() {
+                            Value::DomainIdValue(v) => Value::DomainIdValue(v.clone()),
+                        },
                     ),
                 }
             }
             Language::DomainId => {
                 assert_eq!(enode.children.len(), 1);
                 Meta {
-                    domain_id: Some(
-                        egraph[enode.children[0]]
-                            .metadata
-                            .domain_id
-                            .as_ref()
-                            .unwrap()
-                            .clone(),
+                    value: Some(
+                        match egraph[enode.children[0]].metadata.value.as_ref().unwrap() {
+                            Value::DomainIdValue(v) => Value::DomainIdValue(v.clone()),
+                        },
                     ),
                 }
             }
             Language::Complement => {
                 assert_eq!(enode.children.len(), 1);
                 Meta {
-                    domain_id: Some(
-                        match egraph[enode.children[0]]
-                            .metadata
-                            .domain_id
-                            .as_ref()
-                            .unwrap()
-                        {
-                            DomainId::Complement(domain_id_box) => {
-                                DomainId::DomainId(match **domain_id_box {
+                    value: Some(
+                        match egraph[enode.children[0]].metadata.value.as_ref().unwrap() {
+                            Value::DomainIdValue(DomainId::Complement(domain_id_box)) => {
+                                Value::DomainIdValue(DomainId::DomainId(match **domain_id_box {
                                     DomainId::Complement(_) => panic!(),
                                     DomainId::DomainId(v) => v,
-                                })
+                                }))
                             }
-                            DomainId::DomainId(domain_id) => {
-                                DomainId::Complement(Box::new(DomainId::DomainId(*domain_id)))
+                            Value::DomainIdValue(DomainId::DomainId(domain_id)) => {
+                                Value::DomainIdValue(DomainId::Complement(Box::new(
+                                    DomainId::DomainId(*domain_id),
+                                )))
                             }
                         },
                     ),
                 }
             }
-            Language::StrandCell => Meta { domain_id: None },
+            // At first I thought StrandCells should take on the value of the
+            // domain they contain. I'm still unsure whether we should do this,
+            // but it might take more thought to implement, because it'd be hard
+            // to tease apart which is the domain and which is the other strand
+            // cell. For now I'm going to see what happens if StrandCells don't
+            // get a domain value.
+            Language::StrandCell => {
+                assert_eq!(enode.children.len(), 2);
+
+                Meta {
+                    value: match (
+                        egraph[enode.children[0]].metadata.value.as_ref(),
+                        egraph[enode.children[1]].metadata.value.as_ref(),
+                    ) {
+                        (Some(Value::DomainIdValue(_)), None)
+                        | (None, Some(Value::DomainIdValue(_)))
+                        | (None, None) => {
+                            //Some(Value::StrandCellValue(v.clone()))
+                            None
+                        }
+                        _ => panic!(
+                            "Unexpected combination of metadata:\n{:?}\n{:?}",
+                            egraph[enode.children[0]].metadata.value.as_ref(),
+                            egraph[enode.children[1]].metadata.value.as_ref()
+                        ),
+                    },
+                }
+            }
         }
     }
 }
@@ -175,19 +206,22 @@ pub fn add_strand_to_egraph(
         match &domain {
             &Domain::Toehold(id) => {
                 let domain_id_enode_id: Id = add_domain_id_to_egraph(egraph, id);
-                egraph.add(ENode::new(
+                let toehold_eclass_id: Id = egraph.add(ENode::new(
                     Language::ToeholdDomain,
                     vec![domain_id_enode_id],
-                ))
+                ));
+                egraph.add(ENode::new(Language::Domain, vec![toehold_eclass_id]))
             }
             &Domain::Long(id) => {
                 let domain_id_enode_id: Id = add_domain_id_to_egraph(egraph, id);
-                egraph.add(ENode::new(Language::LongDomain, vec![domain_id_enode_id]))
+                let long_eclass_id: Id =
+                    egraph.add(ENode::new(Language::LongDomain, vec![domain_id_enode_id]));
+                egraph.add(ENode::new(Language::Domain, vec![long_eclass_id]))
             }
         }
     }
 
-    let empty_strand_cell_id = egraph.add(ENode::new(Language::StrandCell, vec![]));
+    let nil_eclass_id = egraph.add(ENode::leaf(Language::Nil));
 
     let domain_eclass_ids: Vec<Id> = strand_values
         .iter()
@@ -206,15 +240,12 @@ pub fn add_strand_to_egraph(
         //      / \   \
         //     c  d1  ...
         //    / \   \
-        //   c  d0  ...
+        //  nil d0  ...
         //       |
         //      ...
-        // Where each c is a strand cell and each d is a domain node. Note that
-        // the leftmost/bottommost cell has no children; this is essentially a
-        // "nil" in a cons cell. It just makes the fold easier, and could be
-        // changed explicitly to "nil" later on.
+        // Where each c is a strand cell and each d is a domain node.
         .fold(
-            empty_strand_cell_id,
+            nil_eclass_id,
             |previous_strand_cell_eclass_id: Id, domain_eclass_id: &Id| {
                 egraph.add(ENode::new(
                     Language::StrandCell,
@@ -255,16 +286,16 @@ mod tests {
                (strand-cell
                 (strand-cell
                  (strand-cell
-                  (strand-cell)
-                  (toehold-domain (domain-id 0))
+                  nil
+                  (domain (toehold-domain (domain-id 0)))
                  )
-                 (long-domain (domain-id 1))
+                 (domain (long-domain (domain-id 1)))
                 )
-                (long-domain (domain-id 2))
+                (domain (long-domain (domain-id 2)))
                )
-               (long-domain (complement (domain-id 2)))
+               (domain (long-domain (complement (domain-id 2))))
               )
-              (long-domain (domain-id 3))
+              (domain (long-domain (domain-id 3)))
              )
              "
             .parse::<Pattern<_>>()

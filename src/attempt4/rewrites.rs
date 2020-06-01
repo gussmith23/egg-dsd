@@ -23,27 +23,50 @@ pub fn simplify_strand_cell() -> Vec<Rewrite<Language, Meta>> {
         "simplify-double-strand-cell-two-arguments";
         "(strand-cell (strand-cell ?arg0 ?arg1))" =>
             "(strand-cell ?arg0 ?arg1)"),
-        rewrite!(
-            "TODO";
-            "(strand-cell (strand-cell ?arg0) ?arg1)" =>
-                "(strand-cell ?arg0 ?arg1)"),
-        rewrite!(
-            "TODO";
-            "(strand-cell ?arg0 (strand-cell ?arg1))" =>
-                "(strand-cell ?arg0 ?arg1)"),
+        // These are actually invalid, given the rule that there must be zero or
+        // one domains per cell.
+        // rewrite!(
+        //     "TODO";
+        //     "(strand-cell (strand-cell ?arg0) ?arg1)" =>
+        //         "(strand-cell ?arg0 ?arg1)"),
+        // rewrite!(
+        //     "TODO";
+        //     "(strand-cell ?arg0 (strand-cell ?arg1))" =>
+        //         "(strand-cell ?arg0 ?arg1)"),
     ]
 }
 
-pub fn strand_cell_commutativity() -> Vec<Rewrite<Language, Meta>> {
+pub fn strand_cell_associativity() -> Vec<Rewrite<Language, Meta>> {
+    vec![
+        // These are no longer correct, as they might break the invariant that
+        // there must be zero or one domains per strand cell.
+        // rewrite!(
+        //     "TODO";
+        //     "(strand-cell (strand-cell ?arg0 ?arg1) ?arg2)" =>
+        //         "(strand-cell ?arg0 (strand-cell ?arg1 ?arg2))"),
+        // rewrite!(
+        //     "TODO";
+        //     "(strand-cell ?arg0 (strand-cell ?arg1 ?arg2))" =>
+        //         "(strand-cell (strand-cell ?arg0 ?arg1) ?arg2)"),
+        rewrite!(
+            "TODO";
+            "(strand-cell (strand-cell (domain ?d0) ?rest) (domain ?d1))" =>
+                "(strand-cell (domain ?d0) (strand-cell ?rest (domain ?d1)))"),
+        rewrite!(
+            "TODO";
+            "(strand-cell (domain ?d0) (strand-cell ?rest (domain ?d1)))" =>
+                "(strand-cell (strand-cell (domain ?d0) ?rest) (domain ?d1))"),
+    ]
+}
+
+pub fn nil_commutativity() -> Vec<Rewrite<Language, Meta>> {
     vec![
         rewrite!(
             "TODO";
-            "(strand-cell (strand-cell ?arg0 ?arg1) ?arg2)" =>
-                "(strand-cell ?arg0 (strand-cell ?arg1 ?arg2))"),
+            "(strand-cell nil ?arg)" => "(strand-cell ?arg nil)"),
         rewrite!(
             "TODO";
-            "(strand-cell ?arg0 (strand-cell ?arg1 ?arg2))" =>
-                "(strand-cell (strand-cell ?arg0 ?arg1) ?arg2)"),
+            "(strand-cell ?arg nil)" => "(strand-cell nil ?arg)"),
     ]
 }
 
@@ -426,6 +449,8 @@ mod tests {
         add_strand_to_egraph(
             &mut egraph,
             &vec![
+                Domain::Long(DomainId::DomainId(5)),
+                Domain::Long(DomainId::DomainId(4)),
                 Domain::Toehold(DomainId::DomainId(0)),
                 Domain::Long(DomainId::DomainId(1)),
                 Domain::Long(DomainId::DomainId(2)),
@@ -435,27 +460,35 @@ mod tests {
         );
 
         let mut rws = simplify_strand_cell();
-        rws.extend(strand_cell_commutativity());
+        rws.extend(strand_cell_associativity());
+        rws.extend(nil_commutativity());
         let runner = Runner::new().with_egraph(egraph).run(&rws);
 
         //runner.egraph.dot().to_svg("simplify-and-commutativity.svg").unwrap();
 
         assert_eq!(
-            "(strand-cell
+            "
+             (strand-cell
               (strand-cell
                (strand-cell
                 (strand-cell
                  (strand-cell
-                  (strand-cell)
-                  (toehold-domain (domain-id 0))
+                  (strand-cell
+                   (strand-cell
+                    nil
+                    (domain (long-domain (domain-id 5)))
+                   )
+                   (domain (long-domain (domain-id 4)))
+                  )
+                  (domain (toehold-domain (domain-id 0)))
                  )
-                 (long-domain (domain-id 1))
+                 (domain (long-domain (domain-id 1)))
                 )
-                (long-domain (domain-id 2))
+                (domain (long-domain (domain-id 2)))
                )
-               (long-domain (complement (domain-id 2)))
+               (domain (long-domain (complement (domain-id 2))))
               )
-              (long-domain (domain-id 3))
+              (domain (long-domain (domain-id 3)))
              )
              "
             .parse::<Pattern<_>>()
@@ -466,11 +499,15 @@ mod tests {
         );
 
         assert_eq!(
-            "(strand-cell (toehold-domain (domain-id 0))
-              (strand-cell (long-domain (domain-id 1))
-               (strand-cell (long-domain (domain-id 2))
-                (strand-cell (long-domain (complement (domain-id 2)))
-                 (long-domain (domain-id 3))))))
+            "
+             (strand-cell (domain (long-domain (domain-id 5)))
+              (strand-cell (domain (long-domain (domain-id 4)))
+               (strand-cell (domain (toehold-domain (domain-id 0)))
+                (strand-cell (domain (long-domain (domain-id 1)))
+                 (strand-cell (domain (long-domain (domain-id 2)))
+                  (strand-cell (domain (long-domain (complement (domain-id 2))))
+                   (strand-cell (domain (long-domain (domain-id 3)))
+                                nil)))))))
              "
             .parse::<Pattern<_>>()
             .unwrap()
@@ -479,16 +516,41 @@ mod tests {
             1
         );
 
+        // toehold should get isolated.
         assert_eq!(
             "(strand-cell
-              (toehold-domain (domain-id 0))
-              (long-domain (domain-id 1)))
+              (domain (toehold-domain (domain-id 0)))
+              nil)
              "
-                .parse::<Pattern<_>>()
-                .unwrap()
-                .search(&runner.egraph)
-                .len(),
+            .parse::<Pattern<_>>()
+            .unwrap()
+            .search(&runner.egraph)
+            .len(),
             1
+        );
+        assert_eq!(
+            "(strand-cell
+              nil
+              (domain (toehold-domain (domain-id 0))))
+             "
+            .parse::<Pattern<_>>()
+            .unwrap()
+            .search(&runner.egraph)
+            .len(),
+            1
+        );
+
+        // Should be able to easily search for neighbors.
+        assert!(
+            "(strand-cell
+              (domain (toehold-domain (domain-id 0)))
+              (strand-cell (domain (long-domain (domain-id 1))) ?rest))
+             "
+            .parse::<Pattern<_>>()
+            .unwrap()
+            .search(&runner.egraph)
+            .len()
+                > 0
         );
     }
 
