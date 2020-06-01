@@ -10,7 +10,7 @@ pub enum DomainId {
 }
 //type StrandId = u32;
 
-#[derive(Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Domain {
     Toehold(DomainId),
     Long(DomainId),
@@ -66,6 +66,10 @@ define_language! {
 pub enum Value {
     /// The value taken on by a domain-id node.
     DomainIdValue(DomainId),
+    /// The value taken on by a domain node (long-domain, toehold-domain, domain)
+    DomainValue(Domain),
+    /// A strand's value is a sequence of domains.
+    StrandCellValue(Vec<Domain>),
 }
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Meta {
@@ -91,7 +95,8 @@ impl Metadata<Language> for Meta {
                 Meta {
                     value: Some(
                         match egraph[enode.children[0]].metadata.value.as_ref().unwrap() {
-                            Value::DomainIdValue(v) => Value::DomainIdValue(v.clone()),
+                            Value::DomainValue(v) => Value::DomainValue(v.clone()),
+                            _ => panic!(),
                         },
                     ),
                 }
@@ -101,7 +106,8 @@ impl Metadata<Language> for Meta {
                 Meta {
                     value: Some(
                         match egraph[enode.children[0]].metadata.value.as_ref().unwrap() {
-                            Value::DomainIdValue(v) => Value::DomainIdValue(v.clone()),
+                            Value::DomainIdValue(v) => Value::DomainValue(Domain::Long(v.clone())),
+                            _ => panic!(),
                         },
                     ),
                 }
@@ -111,7 +117,10 @@ impl Metadata<Language> for Meta {
                 Meta {
                     value: Some(
                         match egraph[enode.children[0]].metadata.value.as_ref().unwrap() {
-                            Value::DomainIdValue(v) => Value::DomainIdValue(v.clone()),
+                            Value::DomainIdValue(v) => {
+                                Value::DomainValue(Domain::Toehold(v.clone()))
+                            }
+                            _ => panic!(),
                         },
                     ),
                 }
@@ -122,6 +131,7 @@ impl Metadata<Language> for Meta {
                     value: Some(
                         match egraph[enode.children[0]].metadata.value.as_ref().unwrap() {
                             Value::DomainIdValue(v) => Value::DomainIdValue(v.clone()),
+                            _ => panic!(),
                         },
                     ),
                 }
@@ -142,6 +152,8 @@ impl Metadata<Language> for Meta {
                                     DomainId::DomainId(*domain_id),
                                 )))
                             }
+                            Value::StrandCellValue(_) => panic!(),
+                            Value::DomainValue(_) => panic!(),
                         },
                     ),
                 }
@@ -160,12 +172,21 @@ impl Metadata<Language> for Meta {
                         egraph[enode.children[0]].metadata.value.as_ref(),
                         egraph[enode.children[1]].metadata.value.as_ref(),
                     ) {
-                        (Some(Value::DomainIdValue(_)), None)
-                        | (None, Some(Value::DomainIdValue(_)))
-                        | (None, None) => {
-                            //Some(Value::StrandCellValue(v.clone()))
-                            None
+                        (Some(Value::DomainValue(v)), None)
+                        | (None, Some(Value::DomainValue(v))) => {
+                            Some(Value::StrandCellValue(vec![v.clone()]))
                         }
+                        (Some(Value::DomainValue(v)), Some(Value::StrandCellValue(s))) => {
+                            Some(Value::StrandCellValue(
+                                std::iter::once(v).chain(s.iter()).cloned().collect(),
+                            ))
+                        }
+                        (Some(Value::StrandCellValue(s)), Some(Value::DomainValue(v))) => {
+                            Some(Value::StrandCellValue(
+                                s.iter().chain(std::iter::once(v)).cloned().collect(),
+                            ))
+                        }
+                        (None, None) => Some(Value::StrandCellValue(vec![])),
                         _ => panic!(
                             "Unexpected combination of metadata:\n{:?}\n{:?}",
                             egraph[enode.children[0]].metadata.value.as_ref(),
@@ -267,7 +288,7 @@ mod tests {
     #[test]
     fn add_to_egraph() {
         let mut egraph = EGraph::<Language, Meta>::default();
-        add_strand_to_egraph(
+        let id: Id = add_strand_to_egraph(
             &mut egraph,
             &vec![
                 Domain::Toehold(DomainId::DomainId(0)),
@@ -304,5 +325,19 @@ mod tests {
             .len(),
             1
         );
+
+        assert_eq!(
+            match egraph[id].metadata.value.as_ref().unwrap() {
+                Value::StrandCellValue(s) => s,
+                _ => panic!(),
+            },
+            &[
+                Domain::Toehold(DomainId::DomainId(0)),
+                Domain::Long(DomainId::DomainId(1)),
+                Domain::Long(DomainId::DomainId(2)),
+                Domain::Long(DomainId::Complement(Box::new(DomainId::DomainId(2)))),
+                Domain::Long(DomainId::DomainId(3)),
+            ],
+        )
     }
 }
