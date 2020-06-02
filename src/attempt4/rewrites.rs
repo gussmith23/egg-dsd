@@ -1,5 +1,6 @@
 use super::*;
-use egg::{rewrite, Rewrite};
+use egg::{rewrite, Applier, Pattern, Rewrite, SearchMatches, Searcher, Subst, Var};
+use log::{debug, info, trace};
 
 pub fn simplify_strand_cell() -> Vec<Rewrite<Language, Meta>> {
     vec![
@@ -84,184 +85,142 @@ pub fn simplify_double_complement() -> Rewrite<Language, Meta> {
             "?a")
 }
 
-// /// Binds toeholds, and then binds everything after the toehold that can be
-// /// bound.
-// pub fn toehold_bind(top_or_bottom: TopOrBottom) -> Rewrite<Language, Meta> {
-//     const A: &'static str = "?A";
-//     const B: &'static str = "?B";
-//     let a_var: Var = A.parse().unwrap();
-//     let b_var: Var = B.parse().unwrap();
-//     struct ToeholdSearcher {
-//         top_or_bottom: TopOrBottom,
-//         /// For a given toehold domain we find, we're going to search for
-//         /// its complement. We memoize the matches here.
-//         _memoized_complement_matches: HashMap<DomainIdValue, Vec<Id>>,
-//         a_var: Var,
-//         b_var: Var,
-//     };
-//     impl ToeholdSearcher {
-//         fn get_complement_matches(
-//             &self,
-//             domain_id: DomainIdValue,
-//             egraph: &EGraph<Language, Meta>,
-//         ) -> Vec<Id> {
-//             // TODO(gus) I can't memoize, because search() and
-//             // search_eclass() give non-mutable references to self :(
-//             // if !self.memoized_complement_matches.contains_key(&domain_id) {
-//             //     let complement_pattern: Pattern<Language> = match self.top_or_bottom {
-//             //         TopOrBottom::Bottom => format!(
-//             //             "(top-strand-cell (toehold-domain (complement {})) ?rest)",
-//             //             domain_id
-//             //         )
-//             //         .parse()
-//             //         .unwrap(),
-//             //         TopOrBottom::Top => format!(
-//             //             "(bottom-strand-cell (toehold-domain (complement {})) ?rest)",
-//             //             domain_id
-//             //         )
-//             //         .parse()
-//             //         .unwrap(),
-//             //     };
-//             //     self.memoized_complement_matches.insert(
-//             //         domain_id,
-//             //         complement_pattern
-//             //             .search(egraph)
-//             //             .iter()
-//             //             .map(|search_matches: &SearchMatches| search_matches.eclass)
-//             //             .collect(),
-//             //     );
-//             // }
-//             // self.memoized_complement_matches
-//             //     .get(&domain_id)
-//             //     .unwrap()
-//             //     .clone()
-//             let complement_pattern: Pattern<Language> = match self.top_or_bottom {
-//                 TopOrBottom::Bottom => format!(
-//                     "(top-strand-cell (toehold-domain (complement (domain-id {}))) ?rest)",
-//                     domain_id
-//                 )
-//                 .parse()
-//                 .unwrap(),
-//                 TopOrBottom::Top => format!(
-//                     "(bottom-strand-cell (toehold-domain (complement (domain-id {}))) ?rest)",
-//                     domain_id
-//                 )
-//                 .parse()
-//                 .unwrap(),
-//             };
-//             complement_pattern
-//                 .search(egraph)
-//                 .iter()
-//                 .map(|search_matches: &SearchMatches| search_matches.eclass)
-//                 .collect()
-//         }
-//     }
-//     impl Searcher<Language, Meta> for ToeholdSearcher {
-//         fn search_eclass(
-//             &self,
-//             egraph: &EGraph<Language, Meta>,
-//             eclass: Id,
-//         ) -> Option<SearchMatches> {
-//             let pattern: Pattern<Language> = match self.top_or_bottom {
-//                 TopOrBottom::Bottom => format!(
-//                     "(bottom-strand-cell (toehold-domain (domain-id {})) ?rest)",
-//                     A
-//                 )
-//                 .parse()
-//                 .unwrap(),
+/// Binds toeholds, and then binds everything after the toehold that can be
+/// bound.
+pub fn toehold_bind() -> Rewrite<Language, Meta> {
+    const A: &'static str = "?A";
+    const B: &'static str = "?B";
+    let a_var: Var = A.parse().unwrap();
+    let b_var: Var = B.parse().unwrap();
+    struct ToeholdSearcher {
+        a_var: Var,
+        b_var: Var,
+    };
+    impl ToeholdSearcher {
+        fn get_complement_match(
+            &self,
+            domain_id: DomainIdValue,
+            egraph: &EGraph<Language, Meta>,
+        ) -> Option<Id> {
+            let complement_pattern: Pattern<Language> = format!(
+                "(strand-cell (domain (toehold-domain (complement (domain-id {})))) nil)",
+                domain_id
+            )
+            .parse()
+            .unwrap();
+            let found: Vec<SearchMatches> = complement_pattern.search(egraph);
+            match found.len() {
+                0 => None,
+                1 => Some(found[0].eclass),
+                _ => panic!("How did we find more than one eclass for this pattern?"),
+            }
+        }
+    }
+    impl Searcher<Language, Meta> for ToeholdSearcher {
+        fn search_eclass(
+            &self,
+            egraph: &EGraph<Language, Meta>,
+            eclass: Id,
+        ) -> Option<SearchMatches> {
+            // TODO(gus) should find everything that
+            // "(strand-cell nil (domain (toehold-domain (domain-id ?domain-id))))"
+            // would find.
+            let pattern: Pattern<Language> =
+                "(strand-cell (domain (toehold-domain (domain-id ?domain-id))) nil)"
+                    .parse()
+                    .unwrap();
 
-//                 TopOrBottom::Top => {
-//                     format!("(top-strand-cell (toehold-domain (domain-id {})) ?rest)", A)
-//                         .parse()
-//                         .unwrap()
-//                 }
-//             };
+            match pattern.search_eclass(egraph, eclass) {
+                None => None,
+                Some(search_matches) => {
+                    let domain_id: &DomainId = match egraph
+                        [search_matches.substs[0][&"?domain-id".parse().unwrap()]]
+                        .metadata
+                        .value
+                        .as_ref()
+                        .unwrap()
+                    {
+                        Value::DomainIdValue(v) => v,
+                        _ => panic!(),
+                    };
+                    let domain_id_value = match domain_id {
+                        DomainId::DomainId(v) => v,
+                        // We should have filtered this out, given the
+                        // pattern we're searching for.
+                        DomainId::Complement(_) => panic!(),
+                    };
 
-//             match pattern.search_eclass(egraph, eclass) {
-//                 None => None,
-//                 Some(search_matches) => {
-//                     let domain_id: &DomainId = egraph[search_matches.substs[0][&self.a_var]]
-//                         .metadata
-//                         .domain_id
-//                         .as_ref()
-//                         .unwrap();
-//                     let domain_id_value = match domain_id {
-//                         DomainId::DomainId(v) => v,
-//                         // We should have filtered this out, given the
-//                         // pattern we're searching for.
-//                         DomainId::Complement(_) => panic!(),
-//                     };
+                    for subst in search_matches.substs[1..].iter() {
+                        assert_eq!(
+                            match egraph[subst[&"?domain-id".parse().unwrap()]]
+                                .metadata
+                                .value
+                                .as_ref()
+                                .unwrap()
+                            {
+                                Value::DomainIdValue(v) => match v {
+                                    DomainId::DomainId(v) => v,
+                                    DomainId::Complement(_) => panic!(),
+                                },
+                                _ => panic!(),
+                            },
+                            domain_id_value
+                        );
+                    }
 
-//                     let complement_matches: Vec<Id> =
-//                         self.get_complement_matches(*domain_id_value, egraph);
-//                     if complement_matches.len() == 0 {
-//                         return None;
-//                     }
+                    match self.get_complement_match(*domain_id_value, egraph) {
+                        None => None,
+                        Some(id) => Some(SearchMatches {
+                            eclass: eclass,
+                            substs: {
+                                let mut new_subst = Subst::default();
+                                new_subst.insert(self.a_var.clone(), eclass);
+                                new_subst.insert(self.b_var.clone(), id);
+                                vec![new_subst]
+                            },
+                        }),
+                    }
+                }
+            }
+        }
+    }
 
-//                     Some(SearchMatches {
-//                         eclass: search_matches.eclass,
-//                         substs: complement_matches
-//                             .iter()
-//                             .map(|id: &Id| {
-//                                 let mut new_subst = Subst::default();
-//                                 new_subst.insert(self.a_var.clone(), search_matches.eclass);
-//                                 new_subst.insert(self.b_var.clone(), *id);
-//                                 new_subst
-//                             })
-//                             .collect(),
-//                     })
-//                 }
-//             }
-//         }
-//     }
+    struct ToeholdApplier {
+        a_var: Var,
+        b_var: Var,
+    };
+    impl Applier<Language, Meta> for ToeholdApplier {
+        fn apply_one(
+            &self,
+            egraph: &mut EGraph<Language, Meta>,
+            _matched_id: Id,
+            subst: &Subst,
+        ) -> Vec<Id> {
+            let strand_cell: Id = subst[&self.a_var];
+            let strand_complement_cell: Id = subst[&self.b_var];
+            let nil_eclass_id: Id = egraph.add(ENode::leaf(Language::Nil));
+            egraph.add(ENode::new(
+                Language::DoubleStrandCell,
+                vec![strand_cell, strand_complement_cell, nil_eclass_id],
+            ));
+            vec![]
+        }
+    }
 
-//     struct ToeholdApplier {
-//         a_var: Var,
-//         b_var: Var,
-//         top_or_bottom: TopOrBottom,
-//     };
-//     impl Applier<Language, Meta> for ToeholdApplier {
-//         fn apply_one(
-//             &self,
-//             egraph: &mut EGraph<Language, Meta>,
-//             _matched_id: Id,
-//             subst: &Subst,
-//         ) -> Vec<Id> {
-//             let single_strand_cell: Id = subst[&self.a_var];
-//             let single_strand_complement_cell: Id = subst[&self.b_var];
-//             let nil_eclass_id: Id = egraph.add(ENode::leaf(Language::Nil));
-//             egraph.add(ENode::new(
-//                 match self.top_or_bottom {
-//                     TopOrBottom::Bottom => Language::BottomDoubleStrandCell,
-//                     TopOrBottom::Top => Language::TopDoubleStrandCell,
-//                 },
-//                 vec![
-//                     single_strand_cell,
-//                     single_strand_complement_cell,
-//                     nil_eclass_id,
-//                 ],
-//             ));
-//             vec![]
-//         }
-//     }
-
-//     rewrite!("toehold-bind";
-//              {
-//                  ToeholdSearcher{
-//                      a_var: a_var.clone(),
-//                      b_var: b_var.clone(),
-//                      _memoized_complement_matches: HashMap::default(),
-//                      top_or_bottom: top_or_bottom
-//                  }
-//              } => {
-//                  ToeholdApplier{
-//                      a_var: a_var.clone(),
-//                      b_var:b_var.clone(),
-//                      top_or_bottom:top_or_bottom
-//                  }
-//              }
-//     )
-// }
+    rewrite!("toehold-bind";
+             {
+                 ToeholdSearcher{
+                     a_var: a_var.clone(),
+                     b_var: b_var.clone(),
+                 }
+             } => {
+                 ToeholdApplier{
+                     a_var: a_var.clone(),
+                     b_var:b_var.clone(),
+                 }
+             }
+    )
+}
 
 // /// Rewrite which binds complementary domains, if their adjacent domains are
 // /// already bound.
@@ -376,46 +335,46 @@ pub fn simplify_double_complement() -> Rewrite<Language, Meta> {
 //         }})
 // }
 
-// pub fn run(egraph: &mut EGraph<Language, Meta>, rules: &[Rewrite<Language, Meta>]) {
-//     let mut egraph_size = egraph.total_size();
-//     loop {
-//         run_one(egraph, rules);
-//         if egraph_size == egraph.total_size() {
-//             break;
-//         }
+pub fn run(egraph: &mut EGraph<Language, Meta>, rules: &[Rewrite<Language, Meta>]) {
+    let mut egraph_size = egraph.total_size();
+    loop {
+        run_one(egraph, rules);
+        if egraph_size == egraph.total_size() {
+            break;
+        }
 
-//         egraph_size = egraph.total_size();
-//     }
-// }
+        egraph_size = egraph.total_size();
+    }
+}
 
-// fn run_one(egraph: &mut EGraph<Language, Meta>, rules: &[Rewrite<Language, Meta>]) {
-//     trace!("EGraph {:?}", egraph.dump());
+fn run_one(egraph: &mut EGraph<Language, Meta>, rules: &[Rewrite<Language, Meta>]) {
+    trace!("EGraph {:?}", egraph.dump());
 
-//     let mut matches = Vec::new();
-//     for rule in rules {
-//         let ms = rule.search(&egraph);
-//         matches.push(ms);
-//     }
+    let mut matches = Vec::new();
+    for rule in rules {
+        let ms = rule.search(&egraph);
+        matches.push(ms);
+    }
 
-//     for (rw, ms) in rules.iter().zip(matches) {
-//         let total_matches: usize = ms.iter().map(|m| m.substs.len()).sum();
-//         if total_matches == 0 {
-//             continue;
-//         }
+    for (rw, ms) in rules.iter().zip(matches) {
+        let total_matches: usize = ms.iter().map(|m| m.substs.len()).sum();
+        if total_matches == 0 {
+            continue;
+        }
 
-//         debug!("Applying {} {} times", rw.name(), total_matches);
+        debug!("Applying {} {} times", rw.name(), total_matches);
 
-//         rw.apply(egraph, &ms);
-//     }
+        rw.apply(egraph, &ms);
+    }
 
-//     egraph.rebuild();
+    egraph.rebuild();
 
-//     info!(
-//         "size: n={}, e={}",
-//         egraph.total_size(),
-//         egraph.number_of_classes()
-//     );
-// }
+    info!(
+        "size: n={}, e={}",
+        egraph.total_size(),
+        egraph.number_of_classes()
+    );
+}
 
 #[cfg(test)]
 mod tests {
@@ -554,48 +513,60 @@ mod tests {
         );
     }
 
-    // #[test]
-    // fn toehold_bind_and_bind() {
-    //     test_logger::ensure_env_logger_initialized();
+    #[test]
+    fn toehold_bind_and_bind() {
+        test_logger::ensure_env_logger_initialized();
 
-    //     let mut egraph = EGraph::<Language, Meta>::default();
-    //     add_strand_to_egraph(
-    //         &mut egraph,
-    //         &vec![
-    //             Domain::Toehold(DomainId::DomainId(0)),
-    //             Domain::Long(DomainId::DomainId(1)),
-    //             Domain::Long(DomainId::DomainId(2)),
-    //             Domain::Long(DomainId::DomainId(3)),
-    //         ],
-    //     );
+        let mut egraph = EGraph::<Language, Meta>::default();
+        add_strand_to_egraph(
+            &mut egraph,
+            &vec![
+                Domain::Long(DomainId::DomainId(5)),
+                Domain::Toehold(DomainId::DomainId(0)),
+                Domain::Long(DomainId::DomainId(1)),
+                Domain::Long(DomainId::DomainId(2)),
+                Domain::Long(DomainId::DomainId(3)),
+            ],
+        );
 
-    //     add_strand_to_egraph(
-    //         &mut egraph,
-    //         &vec![
-    //             Domain::Toehold(DomainId::Complement(Box::new(DomainId::DomainId(0)))),
-    //             Domain::Long(DomainId::Complement(Box::new(DomainId::DomainId(1)))),
-    //             Domain::Long(DomainId::Complement(Box::new(DomainId::DomainId(2)))),
-    //             Domain::Long(DomainId::DomainId(4)),
-    //         ],
-    //     );
+        add_strand_to_egraph(
+            &mut egraph,
+            &vec![
+                Domain::Long(DomainId::Complement(Box::new(DomainId::DomainId(5)))),
+                Domain::Toehold(DomainId::Complement(Box::new(DomainId::DomainId(0)))),
+                Domain::Long(DomainId::Complement(Box::new(DomainId::DomainId(1)))),
+                Domain::Long(DomainId::Complement(Box::new(DomainId::DomainId(2)))),
+                Domain::Long(DomainId::DomainId(4)),
+            ],
+        );
 
-    //     run(
-    //         &mut egraph,
-    //         &[
-    //             super::toehold_bind(TopOrBottom::Bottom),
-    //             super::bind(TopOrBottom::Bottom),
-    //         ],
-    //     );
+        // Rewrite strands to all their equivalent forms
+        let mut rws = simplify_strand_cell();
+        rws.extend(strand_cell_associativity());
+        rws.extend(nil_commutativity());
+        let runner = Runner::new().with_egraph(egraph).run(&rws);
 
-    //     assert_eq!(
-    //         "(bottom-double-strand-cell ?a ?b
-    //               (bottom-double-strand-cell ?c ?d
-    //                (bottom-double-strand-cell ?e ?f nil)))"
-    //             .parse::<Pattern<Language>>()
-    //             .unwrap()
-    //             .search(&egraph)
-    //             .len(),
-    //         1
-    //     );
-    // }
+        let mut egraph = runner.egraph.clone();
+
+        // Run reaction rewrites
+        run(
+            &mut egraph,
+            &[
+                super::toehold_bind(),
+                //super::bind(TopOrBottom::Bottom),
+            ],
+        );
+
+        assert_eq!(
+            "(double-strand-cell
+              (strand-cell (domain (toehold-domain (domain-id 0))) nil)
+              (strand-cell (domain (toehold-domain (complement (domain-id 0)))) nil)
+              nil)"
+                .parse::<Pattern<Language>>()
+                .unwrap()
+                .search(&egraph)
+                .len(),
+            1
+        );
+    }
 }

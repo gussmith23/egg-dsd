@@ -16,26 +16,19 @@ pub enum Domain {
     Long(DomainId),
 }
 
-#[derive(Copy, Clone)]
-pub enum TopOrBottom {
-    Top,
-    Bottom,
-}
-
 define_language! {
     pub enum Language {
         // Syntax:
 
-        // double-strand-cell: [(bottom-double-strand-cell
-        //                       <bottom-strand-cell>
-        //                       <top-strand-cell>
-        //                       [<bottom-double-strand-cell>|nil] )
-        //                      | (top-double-strand-cell
-        //                         <top-strand-cell>
+        // double-strand-cell: [ (double-strand-cell
+        //                        <bottom-strand-cell>
+        //                        <top-strand-cell>
+        //                        [<bottom-double-strand-cell>|nil] )
+        //                      | (double-strand-cell
+        //                         [<bottom-double-strand-cell>|nil]
         //                         <bottom-strand-cell>
-        //                         [<top-double-strand-cell>|nil] )]
-        // BottomDoubleStrandCell = "bottom-double-strand-cell",
-        // TopDoubleStrandCell = "top-double-strand-cell",
+        //                         <top-strand-cell>)
+        DoubleStrandCell = "double-strand-cell",
 
         // Note that a strand cell has zero or one domains; no more.
         // strand-cell: [| (strand-cell [ <strand-cell> | nil ] <domain>)
@@ -194,6 +187,24 @@ impl Metadata<Language> for Meta {
                         ),
                     },
                 }
+            }
+            Language::DoubleStrandCell => {
+                assert_eq!(enode.children.len(), 3);
+
+                // Check that we have two strand cells as arguments.
+                match (
+                    egraph[enode.children[0]].metadata.value.as_ref(),
+                    egraph[enode.children[1]].metadata.value.as_ref(),
+                    egraph[enode.children[2]].metadata.value.as_ref(),
+                ) {
+                    (Some(Value::StrandCellValue(_)), Some(Value::StrandCellValue(_)), None)
+                    | (None, Some(Value::StrandCellValue(_)), Some(Value::StrandCellValue(_))) => {
+                        ()
+                    }
+                    _ => panic!(),
+                };
+
+                Meta { value: None }
             }
         }
     }
