@@ -71,11 +71,68 @@ pub fn nil_commutativity() -> Vec<Rewrite<Language, Meta>> {
     ]
 }
 
-pub fn rewrite() -> Rewrite<Language, Meta> {
-    rewrite!(
-        "rewrite";
-        "(strand-cell (strand-cell ?arg0 ?arg1))" =>
-            "(strand-cell ?arg0 ?arg1)")
+pub fn double_strand_cell_associativity() -> Vec<Rewrite<Language, Meta>> {
+    vec![
+        // These are no longer correct, as they might break the invariant that
+        // there must be zero or one domains per strand cell.
+        // rewrite!(
+        //     "TODO";
+        //     "(strand-cell (strand-cell ?arg0 ?arg1) ?arg2)" =>
+        //         "(strand-cell ?arg0 (strand-cell ?arg1 ?arg2))"),
+        // rewrite!(
+        //     "TODO";
+        //     "(strand-cell ?arg0 (strand-cell ?arg1 ?arg2))" =>
+        //         "(strand-cell (strand-cell ?arg0 ?arg1) ?arg2)"),
+        rewrite!(
+            "TODO";
+            "(double-strand-cell
+              (double-strand-cell
+               (strand-cell ?a ?b ?c)
+               (strand-cell ?d ?e ?f)
+               ?rest)
+              (strand-cell ?g ?h ?i)
+              (strand-cell ?j ?k ?l)
+             )" =>
+                "(double-strand-cell
+                  (strand-cell ?a ?b ?c)
+                  (strand-cell ?d ?e ?f)
+                  (double-strand-cell
+                   ?rest
+                   (strand-cell ?g ?h ?i)
+                   (strand-cell ?j ?k ?l)
+                  )
+                 )"),
+        rewrite!(
+            "TODO";
+            "(double-strand-cell
+              (strand-cell ?a ?b ?c)
+              (strand-cell ?d ?e ?f)
+              (double-strand-cell
+               ?rest
+               (strand-cell ?g ?h ?i)
+               (strand-cell ?j ?k ?l)
+              )
+             )" =>
+                "(double-strand-cell
+                  (double-strand-cell
+                   (strand-cell ?a ?b ?c)
+                   (strand-cell ?d ?e ?f)
+                   ?rest)
+                  (strand-cell ?g ?h ?i)
+                  (strand-cell ?j ?k ?l)
+                 )"),
+    ]
+}
+
+pub fn double_strand_cell_nil_commutativity() -> Vec<Rewrite<Language, Meta>> {
+    vec![
+        rewrite!(
+            "TODO";
+            "(double-strand-cell nil ?arg0 ?arg1)" => "(double-strand-cell ?arg0 ?arg1 nil)"),
+        rewrite!(
+            "TODO";
+            "(double-strand-cell ?arg0 ?arg1 nil)" => "(double-strand-cell nil ?arg0 ?arg1)"),
+    ]
 }
 
 pub fn simplify_double_complement() -> Rewrite<Language, Meta> {
@@ -544,18 +601,10 @@ mod tests {
         let mut rws = simplify_strand_cell();
         rws.extend(strand_cell_associativity());
         rws.extend(nil_commutativity());
+        rws.push(toehold_bind());
+        rws.extend(double_strand_cell_associativity());
+        rws.extend(double_strand_cell_nil_commutativity());
         let runner = Runner::new().with_egraph(egraph).run(&rws);
-
-        let mut egraph = runner.egraph.clone();
-
-        // Run reaction rewrites
-        run(
-            &mut egraph,
-            &[
-                super::toehold_bind(),
-                //super::bind(TopOrBottom::Bottom),
-            ],
-        );
 
         assert_eq!(
             "(double-strand-cell
@@ -564,7 +613,7 @@ mod tests {
               nil)"
                 .parse::<Pattern<Language>>()
                 .unwrap()
-                .search(&egraph)
+                .search(&runner.egraph)
                 .len(),
             1
         );
