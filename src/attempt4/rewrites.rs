@@ -464,7 +464,7 @@ mod tests {
         rws.extend(nil_commutativity());
         let runner = Runner::new().with_egraph(egraph).run(&rws);
 
-        //runner.egraph.dot().to_svg("simplify-and-commutativity.svg").unwrap();
+        //runner.egraph.dot().to_svg("simplify-associativity-commutativity.svg").unwrap();
 
         assert_eq!(
             "
