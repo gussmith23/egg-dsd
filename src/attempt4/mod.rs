@@ -28,6 +28,12 @@ define_language! {
         //                         [<bottom-double-strand-cell>|nil]
         //                         <bottom-strand-cell>
         //                         <top-strand-cell>)
+        // TODO(gus) notes, because I probably won't finish this, and it's
+        // likely where i'll leave the project. The final problem I had to face
+        // was: how to represent double strands? Should unpaired and paired
+        // (i.e. StrandCell and DoubleStrandCell) strands be considered
+        // equivalent? One (rather unformed) argument says yes: i'm not sure
+        // why, but I feel like it'd be useful.
         DoubleStrandCell = "double-strand-cell",
 
         // Note that a strand cell has zero or one domains; no more.
