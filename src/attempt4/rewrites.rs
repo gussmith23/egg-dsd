@@ -39,22 +39,12 @@ pub fn simplify_strand_cell() -> Vec<Rewrite<Language, Meta>> {
 
 pub fn strand_cell_associativity() -> Vec<Rewrite<Language, Meta>> {
     vec![
-        // These are no longer correct, as they might break the invariant that
-        // there must be zero or one domains per strand cell.
-        // rewrite!(
-        //     "TODO";
-        //     "(strand-cell (strand-cell ?arg0 ?arg1) ?arg2)" =>
-        //         "(strand-cell ?arg0 (strand-cell ?arg1 ?arg2))"),
-        // rewrite!(
-        //     "TODO";
-        //     "(strand-cell ?arg0 (strand-cell ?arg1 ?arg2))" =>
-        //         "(strand-cell (strand-cell ?arg0 ?arg1) ?arg2)"),
         rewrite!(
-            "TODO";
+            "strand-cell-associativity-0";
             "(strand-cell (strand-cell (domain ?d0) ?rest) (domain ?d1))" =>
                 "(strand-cell (domain ?d0) (strand-cell ?rest (domain ?d1)))"),
         rewrite!(
-            "TODO";
+            "strand-cell-associativity-1";
             "(strand-cell (domain ?d0) (strand-cell ?rest (domain ?d1)))" =>
                 "(strand-cell (strand-cell (domain ?d0) ?rest) (domain ?d1))"),
     ]
@@ -63,26 +53,16 @@ pub fn strand_cell_associativity() -> Vec<Rewrite<Language, Meta>> {
 pub fn nil_commutativity() -> Vec<Rewrite<Language, Meta>> {
     vec![
         rewrite!(
-            "TODO";
+            "nil-commutativity-0";
             "(strand-cell nil ?arg)" => "(strand-cell ?arg nil)"),
         rewrite!(
-            "TODO";
+            "nil-commutativity-1";
             "(strand-cell ?arg nil)" => "(strand-cell nil ?arg)"),
     ]
 }
 
 pub fn double_strand_cell_associativity() -> Vec<Rewrite<Language, Meta>> {
     vec![
-        // These are no longer correct, as they might break the invariant that
-        // there must be zero or one domains per strand cell.
-        // rewrite!(
-        //     "TODO";
-        //     "(strand-cell (strand-cell ?arg0 ?arg1) ?arg2)" =>
-        //         "(strand-cell ?arg0 (strand-cell ?arg1 ?arg2))"),
-        // rewrite!(
-        //     "TODO";
-        //     "(strand-cell ?arg0 (strand-cell ?arg1 ?arg2))" =>
-        //         "(strand-cell (strand-cell ?arg0 ?arg1) ?arg2)"),
         rewrite!(
             "double-strand-cell-associativity-0";
             "(double-strand-cell
