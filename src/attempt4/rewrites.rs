@@ -2,41 +2,6 @@ use super::*;
 use egg::{rewrite, Applier, Pattern, Rewrite, SearchMatches, Searcher, Subst, Var};
 use log::{debug, info, trace};
 
-pub fn simplify_strand_cell() -> Vec<Rewrite<Language, Meta>> {
-    vec![
-        rewrite!(
-        "remove-empty-strand-cell-left";
-        "(strand-cell (strand-cell) ?rest)" =>
-            "(strand-cell ?rest)"),
-        rewrite!(
-        "remove-empty-strand-cell-right";
-        "(strand-cell ?rest (strand-cell))" =>
-            "(strand-cell ?rest)"),
-        rewrite!(
-        "simplify-double-strand-cell-zero-arguments";
-        "(strand-cell (strand-cell))" =>
-            "(strand-cell)"),
-        rewrite!(
-        "simplify-double-strand-cell-one-argument";
-        "(strand-cell (strand-cell ?arg))" =>
-            "(strand-cell ?arg)"),
-        rewrite!(
-        "simplify-double-strand-cell-two-arguments";
-        "(strand-cell (strand-cell ?arg0 ?arg1))" =>
-            "(strand-cell ?arg0 ?arg1)"),
-        // These are actually invalid, given the rule that there must be zero or
-        // one domains per cell.
-        // rewrite!(
-        //     "TODO";
-        //     "(strand-cell (strand-cell ?arg0) ?arg1)" =>
-        //         "(strand-cell ?arg0 ?arg1)"),
-        // rewrite!(
-        //     "TODO";
-        //     "(strand-cell ?arg0 (strand-cell ?arg1))" =>
-        //         "(strand-cell ?arg0 ?arg1)"),
-    ]
-}
-
 pub fn strand_cell_associativity() -> Vec<Rewrite<Language, Meta>> {
     vec![
         rewrite!(
@@ -529,7 +494,7 @@ mod tests {
             ],
         );
 
-        let mut rws = simplify_strand_cell();
+        let mut rws = Vec::default();
         rws.extend(strand_cell_associativity());
         rws.extend(nil_commutativity());
         let runner = Runner::new().with_egraph(egraph).run(&rws);
@@ -652,7 +617,7 @@ mod tests {
         );
 
         // Rewrite strands to all their equivalent forms
-        let mut rws = simplify_strand_cell();
+        let mut rws = Vec::default();
         rws.push(toehold_bind());
         rws.push(bind());
         rws.extend(strand_cell_associativity());
