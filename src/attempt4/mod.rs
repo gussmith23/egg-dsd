@@ -63,6 +63,10 @@ pub enum Value {
     DomainValue(Domain),
     /// A strand's value is a sequence of domains.
     StrandCellValue(Vec<Domain>),
+    /// A double strand's value is also a sequence of domains representing the
+    /// bottom strand; the top strand's values are all complementary to the
+    /// bottom strand.
+    DoubleStrandCellValue(Vec<Domain>),
 }
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Meta {
@@ -145,8 +149,7 @@ impl Metadata<Language> for Meta {
                                     DomainId::DomainId(*domain_id),
                                 )))
                             }
-                            Value::StrandCellValue(_) => panic!(),
-                            Value::DomainValue(_) => panic!(),
+                            _ => panic!(),
                         },
                     ),
                 }
@@ -191,20 +194,53 @@ impl Metadata<Language> for Meta {
             Language::DoubleStrandCell => {
                 assert_eq!(enode.children.len(), 3);
 
-                // Check that we have two strand cells as arguments.
                 match (
                     egraph[enode.children[0]].metadata.value.as_ref(),
                     egraph[enode.children[1]].metadata.value.as_ref(),
                     egraph[enode.children[2]].metadata.value.as_ref(),
                 ) {
-                    (Some(Value::StrandCellValue(_)), Some(Value::StrandCellValue(_)), None)
-                    | (None, Some(Value::StrandCellValue(_)), Some(Value::StrandCellValue(_))) => {
-                        ()
+                    (
+                        Some(Value::StrandCellValue(bottom)),
+                        Some(Value::StrandCellValue(top)),
+                        None,
+                    )
+                    | (
+                        None,
+                        Some(Value::StrandCellValue(bottom)),
+                        Some(Value::StrandCellValue(top)),
+                    )
+                    | (
+                        Some(Value::DoubleStrandCellValue(_)),
+                        Some(Value::StrandCellValue(bottom)),
+                        Some(Value::StrandCellValue(top)),
+                    )
+                    | (
+                        Some(Value::StrandCellValue(bottom)),
+                        Some(Value::StrandCellValue(top)),
+                        Some(Value::DoubleStrandCellValue(_)),
+                    ) => {
+                        // Check that we have two complementary strand cells as arguments.
+                        println!("{:?}", bottom);
+                        assert!(bottom
+                            .iter()
+                            .map(|d: &Domain| {
+                                match d {
+                                    Domain::Long(v) => {
+                                        Domain::Long(DomainId::Complement(Box::new(v.clone())))
+                                    }
+                                    Domain::Toehold(v) => {
+                                        Domain::Toehold(DomainId::Complement(Box::new(v.clone())))
+                                    }
+                                }
+                            })
+                            .rev()
+                            .eq(top.iter().cloned()));
+                        Meta {
+                            value: Some(Value::DoubleStrandCellValue(bottom.clone())),
+                        }
                     }
                     _ => panic!(),
-                };
-
-                Meta { value: None }
+                }
             }
         }
     }

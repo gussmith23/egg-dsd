@@ -84,42 +84,42 @@ pub fn double_strand_cell_associativity() -> Vec<Rewrite<Language, Meta>> {
         //     "(strand-cell ?arg0 (strand-cell ?arg1 ?arg2))" =>
         //         "(strand-cell (strand-cell ?arg0 ?arg1) ?arg2)"),
         rewrite!(
-            "TODO";
+            "double-strand-cell-associativity-0";
             "(double-strand-cell
               (double-strand-cell
-               (strand-cell ?a ?b ?c)
-               (strand-cell ?d ?e ?f)
+               (strand-cell ?a ?b)
+               (strand-cell ?d ?e)
                ?rest)
-              (strand-cell ?g ?h ?i)
-              (strand-cell ?j ?k ?l)
+              (strand-cell ?g ?h)
+              (strand-cell ?j ?k)
              )" =>
                 "(double-strand-cell
-                  (strand-cell ?a ?b ?c)
-                  (strand-cell ?d ?e ?f)
+                  (strand-cell ?a ?b)
+                  (strand-cell ?d ?e)
                   (double-strand-cell
                    ?rest
-                   (strand-cell ?g ?h ?i)
-                   (strand-cell ?j ?k ?l)
+                   (strand-cell ?g ?h)
+                   (strand-cell ?j ?k)
                   )
                  )"),
         rewrite!(
-            "TODO";
+            "double-strand-cell-associativity-1";
             "(double-strand-cell
-              (strand-cell ?a ?b ?c)
-              (strand-cell ?d ?e ?f)
+              (strand-cell ?a ?b)
+              (strand-cell ?d ?e)
               (double-strand-cell
                ?rest
-               (strand-cell ?g ?h ?i)
-               (strand-cell ?j ?k ?l)
+               (strand-cell ?g ?h)
+               (strand-cell ?j ?k)
               )
              )" =>
                 "(double-strand-cell
                   (double-strand-cell
-                   (strand-cell ?a ?b ?c)
-                   (strand-cell ?d ?e ?f)
+                   (strand-cell ?a ?b)
+                   (strand-cell ?d ?e)
                    ?rest)
-                  (strand-cell ?g ?h ?i)
-                  (strand-cell ?j ?k ?l)
+                  (strand-cell ?g ?h)
+                  (strand-cell ?j ?k)
                  )"),
     ]
 }
@@ -279,118 +279,192 @@ pub fn toehold_bind() -> Rewrite<Language, Meta> {
     )
 }
 
-// /// Rewrite which binds complementary domains, if their adjacent domains are
-// /// already bound.
-// pub fn bind(top_or_bottom: TopOrBottom) -> Rewrite<Language, Meta> {
-//     let search_pattern: Pattern<Language> = match top_or_bottom {
-//         TopOrBottom::Bottom => {
-//             "(bottom-double-strand-cell
-//                                      (bottom-strand-cell
-//                                       ?unused0
-//                                       (bottom-strand-cell
-//                                        (long-domain (domain-id ?a))
-//                                        ?strand0rest))
-//                                      (top-strand-cell
-//                                       ?unused2
-//                                       (top-strand-cell
-//                                        (long-domain (complement (domain-id ?a)))
-//                                        ?strand1rest))
-//                                      ?unused4)"
-//         }
-//         TopOrBottom::Top => {
-//             "(top-double-strand-cell
-//                                   (top-strand-cell
-//                                    ?unused0
-//                                    (top-strand-cell
-//                                     (long-domain (domain-id ?a))
-//                                     ?strand0rest))
-//                                   (bottom-strand-cell
-//                                    ?unused2
-//                                    (bottom-strand-cell
-//                                     (long-domain (complement (domain-id ?a)))
-//                                     ?strand1rest))
-//                                   ?unused4)"
-//         }
-//     }
-//     .parse()
-//     .unwrap();
+/// Rewrite which binds complementary domains, if their adjacent domains are
+/// already bound.
+pub fn bind() -> Rewrite<Language, Meta> {
+    struct BindSearcher {
+        previous_double_strand_cell: Var,
+        next_bottom_strand_cell: Var,
+        next_top_strand_cell: Var,
+    };
+    impl Searcher<Language, Meta> for BindSearcher {
+        fn search_eclass(
+            &self,
+            egraph: &EGraph<Language, Meta>,
+            eclass: Id,
+        ) -> Option<SearchMatches> {
+            let search_pattern: Pattern<Language> = "(double-strand-cell
+                                                      ?a ?b ?c)"
+                .parse()
+                .unwrap();
+            let matches: SearchMatches = match search_pattern.search_eclass(egraph, eclass) {
+                None => return None,
+                Some(m) => m,
+            };
 
-//     struct BindApplier {
-//         top_or_bottom: TopOrBottom,
-//         domain: Var,
-//         strand_0_rest: Var,
-//         strand_1_rest: Var,
-//     }
-//     impl Applier<Language, Meta> for BindApplier {
-//         fn apply_one(
-//             &self,
-//             egraph: &mut EGraph<Language, Meta>,
-//             matched_id: Id,
-//             subst: &Subst,
-//         ) -> Vec<Id> {
-//             let domain_id_value: DomainIdValue = match egraph[subst[&self.domain]]
-//                 .metadata
-//                 .domain_id
-//                 .as_ref()
-//                 .unwrap()
-//             {
-//                 DomainId::DomainId(v) => *v,
-//                 _ => panic!(),
-//             };
+            // If there are two, one must be nil.
+            let (this_bottom_cell_id, this_top_cell_id): (Id, Id) = match matches.substs.as_slice()
+            {
+                [subst] | [subst, _] => {
+                    match egraph[subst[&"?a".parse().unwrap()]]
+                        .metadata
+                        .value
+                        .as_ref()
+                        .unwrap()
+                    {
+                        Value::StrandCellValue(_) => {
+                            (subst[&"?a".parse().unwrap()], subst[&"?b".parse().unwrap()])
+                        }
+                        _ => (subst[&"?b".parse().unwrap()], subst[&"?c".parse().unwrap()]),
+                    }
+                }
+                _ => panic!(),
+            };
 
-//             let domain_id_value_eclass_id: Id =
-//                 egraph.add(ENode::leaf(Language::DomainIdValue(domain_id_value)));
-//             let domain_id_eclass_id: Id = egraph.add(ENode::new(
-//                 Language::DomainId,
-//                 vec![domain_id_value_eclass_id],
-//             ));
-//             let long_domain_eclass_id: Id =
-//                 egraph.add(ENode::new(Language::LongDomain, vec![domain_id_eclass_id]));
-//             let complement_eclass_id: Id =
-//                 egraph.add(ENode::new(Language::Complement, vec![domain_id_eclass_id]));
-//             let complement_long_domain_eclass_id: Id =
-//                 egraph.add(ENode::new(Language::LongDomain, vec![complement_eclass_id]));
-//             let single_strand_0_eclass_id = egraph.add(ENode::new(
-//                 match self.top_or_bottom {
-//                     TopOrBottom::Top => Language::TopStrandCell,
-//                     TopOrBottom::Bottom => Language::BottomStrandCell,
-//                 },
-//                 vec![long_domain_eclass_id, subst[&self.strand_0_rest]],
-//             ));
-//             let single_strand_1_eclass_id = egraph.add(ENode::new(
-//                 match self.top_or_bottom {
-//                     TopOrBottom::Top => Language::BottomStrandCell,
-//                     TopOrBottom::Bottom => Language::TopStrandCell,
-//                 },
-//                 vec![complement_long_domain_eclass_id, subst[&self.strand_1_rest]],
-//             ));
+            let next_bottom_pattern: Pattern<Language> =
+                "(strand-cell ?this-bottom-cell (domain ?domain))"
+                    .parse()
+                    .unwrap();
+            let next_top_pattern: Pattern<Language> =
+                "(strand-cell (domain ?domain) ?this-top-cell)"
+                    .parse()
+                    .unwrap();
 
-//             egraph.add(ENode::new(
-//                 match self.top_or_bottom {
-//                     TopOrBottom::Top => Language::TopDoubleStrandCell,
-//                     TopOrBottom::Bottom => Language::BottomDoubleStrandCell,
-//                 },
-//                 vec![
-//                     single_strand_0_eclass_id,
-//                     single_strand_1_eclass_id,
-//                     matched_id,
-//                 ],
-//             ));
+            use itertools::Itertools;
+            let substs_out: Vec<Subst> = next_bottom_pattern
+                .search(egraph)
+                .iter()
+                .cartesian_product(&next_top_pattern.search(egraph))
+                .filter_map(
+                    |(bottom_matches, top_matches): (&SearchMatches, &SearchMatches)| {
+                        // This is only true because ?domain can only have one value
+                        // (will point to a long-domain or a toehold-domain) and
+                        // because ?this-bottom-cell/?this-top-cell can likewise
+                        // only have one value each.
+                        let bottom_subst: &Subst = match bottom_matches.substs.as_slice() {
+                            [subst] => subst,
+                            _ => panic!(),
+                        };
+                        let top_subst: &Subst = match top_matches.substs.as_slice() {
+                            [subst] => subst,
+                            _ => panic!(),
+                        };
 
-//             vec![]
-//         }
-//     }
+                        // First, check that the bottom cell is the same one as
+                        // the one in our double cell.
+                        if bottom_subst[&"?this-bottom-cell".parse().unwrap()]
+                            != this_bottom_cell_id
+                        {
+                            return None;
+                        }
 
-//     rewrite!("bind";
-//     search_pattern =>
-//     {
-//         BindApplier {
-//             domain: "?a".parse().unwrap(),
-//             top_or_bottom: top_or_bottom,
-//             strand_0_rest: "?strand0rest".parse().unwrap(),
-//             strand_1_rest: "?strand1rest".parse().unwrap(),
-//         }})
-// }
+                        // Then, check that the top cell is also the one in our
+                        // double cell.
+                        if top_subst[&"?this-top-cell".parse().unwrap()] != this_top_cell_id {
+                            return None;
+                        }
+
+                        // Finally, check that the domains are complementary.
+                        match (
+                            egraph[bottom_subst[&"?domain".parse().unwrap()]]
+                                .metadata
+                                .value
+                                .as_ref()
+                                .unwrap(),
+                            egraph[top_subst[&"?domain".parse().unwrap()]]
+                                .metadata
+                                .value
+                                .as_ref()
+                                .unwrap(),
+                        ) {
+                            (
+                                Value::DomainValue(Domain::Long(DomainId::DomainId(d))),
+                                Value::DomainValue(Domain::Long(DomainId::Complement(d_box))),
+                            )
+                            | (
+                                Value::DomainValue(Domain::Toehold(DomainId::DomainId(d))),
+                                Value::DomainValue(Domain::Toehold(DomainId::Complement(d_box))),
+                            )
+                            | (
+                                Value::DomainValue(Domain::Long(DomainId::Complement(d_box))),
+                                Value::DomainValue(Domain::Long(DomainId::DomainId(d))),
+                            )
+                            | (
+                                Value::DomainValue(Domain::Toehold(DomainId::Complement(d_box))),
+                                Value::DomainValue(Domain::Toehold(DomainId::DomainId(d))),
+                            ) => {
+                                // I think there shouldn't be multiple nested complements here.
+                                let d2: DomainIdValue = match **d_box {
+                                    DomainId::DomainId(v) => v,
+                                    _ => panic!(),
+                                };
+                                if *d != d2 {
+                                    return None;
+                                }
+                            }
+                            (Value::DomainValue(_), Value::DomainValue(_)) => return None,
+                            _ => panic!(),
+                        }
+
+                        // If we've made it this far, these things can be stuck
+                        // into a new double cell!
+
+                        let mut subst_out = Subst::default();
+
+                        subst_out
+                            .insert(self.next_bottom_strand_cell.clone(), bottom_matches.eclass);
+                        subst_out.insert(self.next_top_strand_cell.clone(), top_matches.eclass);
+                        subst_out.insert(self.previous_double_strand_cell.clone(), eclass);
+
+                        Some(subst_out)
+                    },
+                )
+                .collect();
+
+            Some(SearchMatches {
+                eclass: eclass,
+                substs: substs_out,
+            })
+        }
+    }
+
+    struct BindApplier {
+        previous_double_strand_cell: Var,
+        next_bottom_strand_cell: Var,
+        next_top_strand_cell: Var,
+    };
+    impl Applier<Language, Meta> for BindApplier {
+        fn apply_one(
+            &self,
+            egraph: &mut EGraph<Language, Meta>,
+            _matched_id: Id,
+            subst: &Subst,
+        ) -> Vec<Id> {
+            egraph.add(ENode::new(
+                Language::DoubleStrandCell,
+                vec![
+                    subst[&self.previous_double_strand_cell],
+                    subst[&self.next_bottom_strand_cell],
+                    subst[&self.next_top_strand_cell],
+                ],
+            ));
+
+            vec![]
+        }
+    }
+
+    rewrite!("bind";
+             { BindSearcher {
+                 previous_double_strand_cell: "?previous-double-strand-cell".parse().unwrap(),
+                 next_bottom_strand_cell: "?next-bottom-strand-cell".parse().unwrap(),
+                 next_top_strand_cell: "?next-top-strand-cell".parse().unwrap(),
+             } } =>
+             { BindApplier {
+                 previous_double_strand_cell: "?previous-double-strand-cell".parse().unwrap(),
+                 next_bottom_strand_cell: "?next-bottom-strand-cell".parse().unwrap(),
+                 next_top_strand_cell: "?next-top-strand-cell".parse().unwrap(),
+             } })
+}
 
 pub fn run(egraph: &mut EGraph<Language, Meta>, rules: &[Rewrite<Language, Meta>]) {
     let mut egraph_size = egraph.total_size();
@@ -589,22 +663,29 @@ mod tests {
         add_strand_to_egraph(
             &mut egraph,
             &vec![
-                Domain::Long(DomainId::Complement(Box::new(DomainId::DomainId(5)))),
-                Domain::Toehold(DomainId::Complement(Box::new(DomainId::DomainId(0)))),
-                Domain::Long(DomainId::Complement(Box::new(DomainId::DomainId(1)))),
-                Domain::Long(DomainId::Complement(Box::new(DomainId::DomainId(2)))),
                 Domain::Long(DomainId::DomainId(4)),
+                Domain::Long(DomainId::Complement(Box::new(DomainId::DomainId(2)))),
+                Domain::Long(DomainId::Complement(Box::new(DomainId::DomainId(1)))),
+                Domain::Toehold(DomainId::Complement(Box::new(DomainId::DomainId(0)))),
+                Domain::Long(DomainId::Complement(Box::new(DomainId::DomainId(5)))),
             ],
         );
 
         // Rewrite strands to all their equivalent forms
         let mut rws = simplify_strand_cell();
+        rws.push(toehold_bind());
+        rws.push(bind());
         rws.extend(strand_cell_associativity());
         rws.extend(nil_commutativity());
-        rws.push(toehold_bind());
         rws.extend(double_strand_cell_associativity());
         rws.extend(double_strand_cell_nil_commutativity());
         let runner = Runner::new().with_egraph(egraph).run(&rws);
+
+        runner
+            .egraph
+            .dot()
+            .to_svg("toehold-bind-and-bind.svg")
+            .unwrap();
 
         assert_eq!(
             "(double-strand-cell
@@ -616,6 +697,21 @@ mod tests {
                 .search(&runner.egraph)
                 .len(),
             1
+        );
+        assert_eq!(
+            "(double-strand-cell
+              (double-strand-cell
+               (strand-cell ?a ?b)
+               (strand-cell ?c ?d)
+               ?rest)
+              (strand-cell ?e ?f)
+              (strand-cell ?g ?h)
+             )"
+            .parse::<Pattern<Language>>()
+            .unwrap()
+            .search(&runner.egraph)
+            .len(),
+            3
         );
     }
 }
