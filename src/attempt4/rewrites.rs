@@ -15,7 +15,7 @@ pub fn strand_cell_associativity() -> Vec<Rewrite<Language, Meta>> {
     ]
 }
 
-pub fn nil_commutativity() -> Vec<Rewrite<Language, Meta>> {
+pub fn strand_cell_nil_commutativity() -> Vec<Rewrite<Language, Meta>> {
     vec![
         rewrite!(
             "nil-commutativity-0";
@@ -496,7 +496,7 @@ mod tests {
 
         let mut rws = Vec::default();
         rws.extend(strand_cell_associativity());
-        rws.extend(nil_commutativity());
+        rws.extend(strand_cell_nil_commutativity());
         let runner = Runner::new().with_egraph(egraph).run(&rws);
 
         //runner.egraph.dot().to_svg("simplify-associativity-commutativity.svg").unwrap();
@@ -621,7 +621,7 @@ mod tests {
         rws.push(toehold_bind());
         rws.push(bind());
         rws.extend(strand_cell_associativity());
-        rws.extend(nil_commutativity());
+        rws.extend(strand_cell_nil_commutativity());
         rws.extend(double_strand_cell_associativity());
         rws.extend(double_strand_cell_nil_commutativity());
         let runner = Runner::new().with_egraph(egraph).run(&rws);
